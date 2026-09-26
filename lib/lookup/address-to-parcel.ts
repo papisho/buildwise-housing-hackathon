@@ -20,6 +20,10 @@ import {
   type SteepSlopeLookupResult,
 } from "@/lib/hazards/steep-slope";
 import {
+  buildDecisionSnapshot,
+  type DecisionSnapshot,
+} from "@/lib/scoring";
+import {
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
@@ -32,6 +36,7 @@ export type AddressToParcelResult =
       assessment: AssessmentLookupResult;
       zoning: ZoningLookupResult;
       steepSlope: SteepSlopeLookupResult;
+      decision: DecisionSnapshot;
     }
   | {
       status: "invalid_input";
@@ -178,6 +183,7 @@ export async function findParcelForAddress(
         assessment,
         zoning,
         steepSlope,
+        decision: buildDecisionSnapshot({ assessment, zoning, steepSlope }),
       };
     }
 
@@ -203,5 +209,6 @@ export async function findParcelForAddress(
     assessment,
     zoning,
     steepSlope,
+    decision: buildDecisionSnapshot({ assessment, zoning, steepSlope }),
   };
 }

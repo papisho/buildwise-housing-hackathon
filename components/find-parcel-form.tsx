@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
+import type { DecisionSnapshot } from "@/lib/scoring";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 
@@ -73,7 +74,8 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
   if (result.status === "ok") {
     return (
       <div className="mt-6">
-        <h2 className="text-lg font-medium">Matched parcel</h2>
+        <DecisionSnapshotCard decision={result.decision} />
+        <h2 className="mt-8 text-lg font-medium">Matched parcel</h2>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-neutral-600">Census matched address</dt>
           <dd>{result.census.matchedAddress}</dd>
@@ -96,6 +98,7 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
         />
         <ZoningFacts zoning={result.zoning} />
         <SiteConditions steepSlope={result.steepSlope} />
+        <EvidenceGaps decision={result.decision} />
       </div>
     );
   }
@@ -133,6 +136,77 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+function DecisionSnapshotCard({ decision }: { decision: DecisionSnapshot }) {
+  const { presentation } = decision;
+
+  return (
+    <section className="border border-neutral-300 p-4">
+      <h2 className="text-lg font-medium">Development feasibility snapshot</h2>
+      <p className="mt-1 text-sm font-medium">
+        Scoring v{decision.scoringVersion} — Provisional
+      </p>
+      <p className="mt-3 text-sm">
+        This is a technical/provisional v0.1 score, not the final SME-validated
+        model. Weights and penalties can change. It is not legal, zoning,
+        engineering, environmental, or financial advice.
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="text-lg font-medium">
+            {presentation.heading}: {presentation.valueLine}
+          </p>
+          {presentation.mode === "incomplete" ? (
+            <>
+              <p className="mt-1 text-sm">{presentation.caveat}</p>
+              <p className="mt-1 text-sm">{presentation.scoredFactorsLine}</p>
+            </>
+          ) : null}
+        </div>
+        <div>
+          <p className="text-sm text-neutral-600">Evidence Coverage</p>
+          <p className="text-lg font-medium">{decision.coverage.percent}%</p>
+          <p className="mt-1 text-sm">{decision.coverage.label}</p>
+        </div>
+      </div>
+      <p className="mt-4 text-sm">
+        Critical Review Flags: {decision.flags.length}
+      </p>
+      {decision.flags.length > 0 ? (
+        <ul className="mt-3 list-disc pl-5 text-sm">
+          {decision.flags.map((flag) => (
+            <li key={flag.type}>
+              <span className="font-medium">
+                {flag.level}: {flag.title}.
+              </span>{" "}
+              {flag.finding} {flag.verificationAction} A high numeric score does
+              not hide this flag.
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-neutral-600">
+          No critical review flags from currently implemented evidence.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function EvidenceGaps({ decision }: { decision: DecisionSnapshot }) {
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-medium">Evidence gaps</h2>
+      <ul className="mt-2 list-disc pl-5 text-sm">
+        {decision.evidenceGaps.map((gap) => (
+          <li key={gap.label}>
+            {gap.label} — Not Evaluated
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

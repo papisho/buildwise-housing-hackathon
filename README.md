@@ -20,6 +20,7 @@ This tool is **not** legal, zoning, engineering, environmental, or financial adv
 4. Allegheny County Property Assessments are loaded by PARID.
 5. City of Pittsburgh base zoning is intersected with the **parcel polygon**, not the Census point. Multiple districts are listed as split zoning.
 6. City of Pittsburgh mapped ≥25% slope is intersected with the same parcel polygon. Overlap percent is calculated in EPSG:2272 when the clip succeeds.
+7. A **Scoring v0.1 — Provisional** snapshot is computed in `lib/scoring/` from that evidence only. It is not the SME-validated model.
 
 ## Data sources currently used
 
@@ -39,7 +40,8 @@ This tool is **not** legal, zoning, engineering, environmental, or financial adv
 - Steep slope is the City ≥25% slope GIS layer only. Landslide, mine, and flood layers are not evaluated.
 - Overlap percent is a planar GIS calculation in Pennsylvania State Plane South (US survey feet). It is not a field survey.
 - Source or API failure for zoning or slope is shown as not evaluated. Missing data is not treated as a clean or favorable site.
-- No Development Ease Score, no SQLite cache, and no AI narrative on the result.
+- Development Ease Score is Scoring Version 0.1 — Provisional. It currently uses only steep-slope overlap. Zoning-use compatibility, landslide, mine, and flood are not scored. A high score does not hide a Critical Flag.
+- No SQLite cache and no AI narrative on the result.
 
 ## AI / tools used so far
 
