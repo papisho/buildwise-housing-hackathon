@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
+import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 
 export function FindParcelForm() {
   const [address, setAddress] = useState("");
@@ -92,6 +93,7 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
           pin={result.parcel.pin}
           assessment={result.assessment}
         />
+        <ZoningFacts zoning={result.zoning} />
       </div>
     );
   }
@@ -238,6 +240,85 @@ function AssessmentFacts({
         ) : null}
       </dl>
     </div>
+  );
+}
+
+function ZoningFacts({ zoning }: { zoning: ZoningLookupResult }) {
+  if (zoning.status === "unavailable") {
+    return (
+      <div className="mt-6" role="alert">
+        <h2 className="text-lg font-medium">Base zoning</h2>
+        <p className="mt-2 text-sm">Zoning not evaluated. {zoning.message}</p>
+      </div>
+    );
+  }
+
+  if (zoning.status === "no_district") {
+    return (
+      <div className="mt-6" role="alert">
+        <h2 className="text-lg font-medium">Base zoning</h2>
+        <p className="mt-2 text-sm">{zoning.message}</p>
+        <ZoningSource source={zoning.source} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-medium">Base zoning</h2>
+      <p className="mt-1 text-sm text-neutral-600">
+        Mapped GIS district only. This is not a determination that a use is
+        permitted, approved, or buildable. If there is a dispute, the official
+        zoning code and maps maintained by the Zoning Administrator prevail.
+      </p>
+      {zoning.splitZoning ? (
+        <p className="mt-2 text-sm" role="status">
+          Split zoning / multiple mapped districts. All intersecting districts
+          are listed; none was selected as the sole district.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm">
+          The parcel intersects one mapped zoning district.
+        </p>
+      )}
+      <ul className="mt-3 list-disc pl-5 text-sm">
+        {zoning.districts.map((district) => (
+          <li key={district.code}>
+            <span className="font-medium">{district.code}</span>
+            {district.fullType ? ` — ${district.fullType}` : ""}
+            {district.legendType ? ` (${district.legendType})` : ""}
+            {district.status ? ` · ${district.status}` : ""}
+          </li>
+        ))}
+      </ul>
+      <ZoningSource source={zoning.source} />
+    </div>
+  );
+}
+
+function ZoningSource({ source }: { source: ZoningSource }) {
+  return (
+    <p className="mt-3 text-sm text-neutral-600">
+      Source: {source.name}. Dataset last modified:{" "}
+      {source.sourceLastModified ?? "not reported"}. Retrieved{" "}
+      {source.retrievedAt}.{" "}
+      <a href={source.datasetUrl} className="underline">
+        WPRDC zoning
+      </a>
+      {" · "}
+      <a href={source.zoningCodeUrl} className="underline">
+        Zoning Code
+      </a>
+      {" · "}
+      <a href={source.zoningMapUrl} className="underline">
+        City zoning map
+      </a>
+      {" · "}
+      <a href={source.cityZoningPageUrl} className="underline">
+        City zoning page
+      </a>
+      .
+    </p>
   );
 }
 

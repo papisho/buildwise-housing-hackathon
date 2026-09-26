@@ -8,12 +8,17 @@ import {
 } from "@/lib/geocoder/census";
 import {
   findParcelByPoint,
+  findParcelGeometryByPin,
   type CountyParcel,
 } from "@/lib/parcels/allegheny";
 import {
   disambiguateParcelsByAssessmentAddress,
   type ParcelAddressCandidate,
 } from "@/lib/parcels/disambiguate";
+import {
+  findZoningForParcelGeometry,
+  type ZoningLookupResult,
+} from "@/lib/zoning/pittsburgh";
 
 export type AddressToParcelResult =
   | {
@@ -21,6 +26,7 @@ export type AddressToParcelResult =
       census: CensusMatch;
       parcel: CountyParcel;
       assessment: AssessmentLookupResult;
+      zoning: ZoningLookupResult;
     }
   | {
       status: "invalid_input";
@@ -63,6 +69,21 @@ export type AddressToParcelResult =
 
 function isPittsburgh(match: CensusMatch): boolean {
   return match.city.toUpperCase() === "PITTSBURGH";
+}
+
+async function lookupZoningForPin(pin: string): Promise<ZoningLookupResult> {
+  const geometry = await findParcelGeometryByPin(pin);
+  if (geometry.status === "unavailable") {
+    return { status: "unavailable", message: geometry.message };
+  }
+  if (geometry.status === "no_match") {
+    return {
+      status: "unavailable",
+      message:
+        "Zoning not evaluated / parcel geometry was not available for intersection.",
+    };
+  }
+  return findZoningForParcelGeometry(geometry.geometry);
 }
 
 export async function findParcelForAddress(
@@ -141,11 +162,13 @@ export async function findParcelForAddress(
 
     if (disambiguated.status === "ok") {
       const assessment = await findAssessmentByParid(disambiguated.parcel.pin);
+      const zoning = await lookupZoningForPin(disambiguated.parcel.pin);
       return {
         status: "ok",
         census,
         parcel: disambiguated.parcel,
         assessment,
+        zoning,
       };
     }
 
@@ -159,11 +182,13 @@ export async function findParcelForAddress(
   }
 
   const assessment = await findAssessmentByParid(parcelLookup.parcel.pin);
+  const zoning = await lookupZoningForPin(parcelLookup.parcel.pin);
 
   return {
     status: "ok",
     census,
     parcel: parcelLookup.parcel,
     assessment,
+    zoning,
   };
 }

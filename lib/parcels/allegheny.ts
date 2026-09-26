@@ -10,6 +10,15 @@ export type CountyParcel = {
   calculatedAcreage: number | null;
 };
 
+export type ParcelPolygon =
+  | { type: "Polygon"; coordinates: number[][][] }
+  | { type: "MultiPolygon"; coordinates: number[][][][] };
+
+export type ParcelGeometryResult =
+  | { status: "ok"; geometry: ParcelPolygon }
+  | { status: "no_match" }
+  | { status: "unavailable"; message: string };
+
 export type ParcelLookupResult =
   | { status: "ok"; parcel: CountyParcel }
   | { status: "no_match" }
@@ -182,4 +191,80 @@ export async function findParcelByPoint(
     latitude,
     STREET_CENTERLINE_SEARCH_FEET,
   );
+}
+
+type GeoJsonFeatureCollection = {
+  features?: Array<{
+    properties?: Record<string, ArcGisAttributeValue>;
+    geometry?: unknown;
+  }>;
+};
+
+function isParcelPolygon(value: unknown): value is ParcelPolygon {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const geometry = value as { type?: unknown; coordinates?: unknown };
+  return (
+    (geometry.type === "Polygon" || geometry.type === "MultiPolygon") &&
+    Array.isArray(geometry.coordinates)
+  );
+}
+
+export async function findParcelGeometryByPin(
+  pin: string,
+): Promise<ParcelGeometryResult> {
+  if (!NORMAL_PARCEL_PIN.test(pin)) {
+    return { status: "no_match" };
+  }
+
+  const url = new URL(PARCEL_QUERY_URL);
+  url.searchParams.set("where", `PIN='${pin}'`);
+  url.searchParams.set("outFields", "PIN");
+  url.searchParams.set("returnGeometry", "true");
+  url.searchParams.set("outSR", "4326");
+  url.searchParams.set("f", "geojson");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { Accept: "application/geo+json, application/json" },
+    });
+
+    if (!response.ok) {
+      return {
+        status: "unavailable",
+        message: `Allegheny County parcel geometry service returned HTTP ${response.status}.`,
+      };
+    }
+
+    const payload = (await response.json()) as GeoJsonFeatureCollection;
+    const candidate = (payload.features ?? []).find(
+      (feature) => readString(feature.properties?.PIN) === pin,
+    )?.geometry;
+
+    if (!isParcelPolygon(candidate)) {
+      return { status: "no_match" };
+    }
+
+    return { status: "ok", geometry: candidate };
+  } catch (error) {
+    const aborted =
+      error instanceof Error &&
+      (error.name === "AbortError" || error.message.includes("abort"));
+
+    return {
+      status: "unavailable",
+      message: aborted
+        ? "Allegheny County parcel geometry service timed out."
+        : "Allegheny County parcel geometry service could not be reached.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
