@@ -1,3 +1,5 @@
+import { FindParcelForm } from "@/components/find-parcel-form";
+
 export default function Home() {
   return (
     <main className="mx-auto max-w-2xl p-8">
@@ -16,6 +18,7 @@ export default function Home() {
         This tool is not legal, zoning, engineering, environmental, or financial
         advice.
       </p>
+      <FindParcelForm />
     </main>
   );
 }
