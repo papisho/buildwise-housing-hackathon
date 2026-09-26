@@ -2,6 +2,8 @@ import { findParcelForAddress } from "@/lib/lookup/address-to-parcel";
 import { parseProposedProjectType } from "@/lib/project-type";
 import { NextResponse } from "next/server";
 
+export const maxDuration = 120;
+
 export async function POST(request: Request) {
   let address = "";
   let proposedProjectType = parseProposedProjectType(undefined);

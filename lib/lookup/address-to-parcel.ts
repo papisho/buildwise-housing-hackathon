@@ -36,10 +36,16 @@ import {
   parseProposedProjectType,
   type ProposedProjectType,
 } from "@/lib/project-type";
+import { buildRecommendedVerification } from "@/lib/review/next-steps";
 import {
   buildDecisionSnapshot,
   type DecisionSnapshot,
 } from "@/lib/scoring";
+import {
+  explainAnalysis,
+  buildClaudeAnalysisInput,
+} from "@/lib/claude/client";
+import type { ClaudeExplanationResult } from "@/lib/claude/types";
 import {
   evaluateUseCompatibility,
   type UseCompatibilityResult,
@@ -68,6 +74,8 @@ export type AddressToParcelResult =
       undermined: UnderminedLookupResult;
       flood: FloodLookupResult;
       decision: DecisionSnapshot;
+      recommendedVerification: string[];
+      aiSummary: ClaudeExplanationResult;
     }
   | {
       status: "invalid_input";
@@ -253,22 +261,12 @@ export async function findParcelForAddress(
 
     if (disambiguated.status === "ok") {
       const evidence = await lookupSiteEvidence(disambiguated.parcel.pin);
-      const useCompatibility = evaluateUseCompatibility({
-        proposedProjectType: request.proposedProjectType,
-        zoning: evidence.zoning,
-      });
-      return {
-        status: "ok",
+      return completeOkResult({
         request,
         census,
         parcel: disambiguated.parcel,
-        ...evidence,
-        useCompatibility,
-        decision: buildDecisionSnapshot({
-          ...evidence,
-          useCompatibility,
-        }),
-      };
+        evidence,
+      });
     }
 
     return {
@@ -281,21 +279,66 @@ export async function findParcelForAddress(
   }
 
   const evidence = await lookupSiteEvidence(parcelLookup.parcel.pin);
-  const useCompatibility = evaluateUseCompatibility({
-    proposedProjectType: request.proposedProjectType,
-    zoning: evidence.zoning,
-  });
-
-  return {
-    status: "ok",
+  return completeOkResult({
     request,
     census,
     parcel: parcelLookup.parcel,
-    ...evidence,
+    evidence,
+  });
+}
+
+async function completeOkResult(input: {
+  request: AnalysisRequest;
+  census: CensusMatch;
+  parcel: CountyParcel;
+  evidence: {
+    assessment: AssessmentLookupResult;
+    zoning: ZoningLookupResult;
+    steepSlope: SteepSlopeLookupResult;
+    landslide: LandslideLookupResult;
+    undermined: UnderminedLookupResult;
+    flood: FloodLookupResult;
+  };
+}): Promise<Extract<AddressToParcelResult, { status: "ok" }>> {
+  const useCompatibility = evaluateUseCompatibility({
+    proposedProjectType: input.request.proposedProjectType,
+    zoning: input.evidence.zoning,
+  });
+  const decision = buildDecisionSnapshot({
+    ...input.evidence,
     useCompatibility,
-    decision: buildDecisionSnapshot({
-      ...evidence,
+  });
+  const recommendedVerification = buildRecommendedVerification({
+    ...input.evidence,
+    useCompatibility,
+    decision,
+  });
+  const aiSummary = await explainAnalysis(
+    buildClaudeAnalysisInput({
+      address: input.census.matchedAddress,
+      parcelId: input.parcel.pin,
+      proposedProjectType: input.request.proposedProjectType,
+      assessment: input.evidence.assessment,
+      zoning: input.evidence.zoning,
       useCompatibility,
+      steepSlope: input.evidence.steepSlope,
+      landslide: input.evidence.landslide,
+      undermined: input.evidence.undermined,
+      flood: input.evidence.flood,
+      decision,
+      recommendedVerification,
     }),
+  );
+
+  return {
+    status: "ok",
+    request: input.request,
+    census: input.census,
+    parcel: input.parcel,
+    ...input.evidence,
+    useCompatibility,
+    decision,
+    recommendedVerification,
+    aiSummary,
   };
 }
