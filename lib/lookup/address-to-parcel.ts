@@ -16,6 +16,10 @@ import {
   type ParcelAddressCandidate,
 } from "@/lib/parcels/disambiguate";
 import {
+  findSteepSlopeForPin,
+  type SteepSlopeLookupResult,
+} from "@/lib/hazards/steep-slope";
+import {
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
@@ -27,6 +31,7 @@ export type AddressToParcelResult =
       parcel: CountyParcel;
       assessment: AssessmentLookupResult;
       zoning: ZoningLookupResult;
+      steepSlope: SteepSlopeLookupResult;
     }
   | {
       status: "invalid_input";
@@ -161,14 +166,18 @@ export async function findParcelForAddress(
     );
 
     if (disambiguated.status === "ok") {
-      const assessment = await findAssessmentByParid(disambiguated.parcel.pin);
-      const zoning = await lookupZoningForPin(disambiguated.parcel.pin);
+      const [assessment, zoning, steepSlope] = await Promise.all([
+        findAssessmentByParid(disambiguated.parcel.pin),
+        lookupZoningForPin(disambiguated.parcel.pin),
+        findSteepSlopeForPin(disambiguated.parcel.pin),
+      ]);
       return {
         status: "ok",
         census,
         parcel: disambiguated.parcel,
         assessment,
         zoning,
+        steepSlope,
       };
     }
 
@@ -181,8 +190,11 @@ export async function findParcelForAddress(
     };
   }
 
-  const assessment = await findAssessmentByParid(parcelLookup.parcel.pin);
-  const zoning = await lookupZoningForPin(parcelLookup.parcel.pin);
+  const [assessment, zoning, steepSlope] = await Promise.all([
+    findAssessmentByParid(parcelLookup.parcel.pin),
+    lookupZoningForPin(parcelLookup.parcel.pin),
+    findSteepSlopeForPin(parcelLookup.parcel.pin),
+  ]);
 
   return {
     status: "ok",
@@ -190,5 +202,6 @@ export async function findParcelForAddress(
     parcel: parcelLookup.parcel,
     assessment,
     zoning,
+    steepSlope,
   };
 }

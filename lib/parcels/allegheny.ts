@@ -268,3 +268,95 @@ export async function findParcelGeometryByPin(
     clearTimeout(timer);
   }
 }
+
+export type EsriPolygon = {
+  rings: number[][][];
+  spatialReference: { wkid: number };
+};
+
+export type ParcelEsriGeometryResult =
+  | { status: "ok"; geometry: EsriPolygon }
+  | { status: "no_match" }
+  | { status: "unavailable"; message: string };
+
+type EsriQueryResponse = {
+  features?: Array<{
+    attributes?: Record<string, ArcGisAttributeValue>;
+    geometry?: { rings?: number[][][] };
+  }>;
+  error?: { message?: string };
+};
+
+export async function findParcelEsriGeometryByPin(
+  pin: string,
+  outSR: number,
+): Promise<ParcelEsriGeometryResult> {
+  if (!NORMAL_PARCEL_PIN.test(pin)) {
+    return { status: "no_match" };
+  }
+
+  const url = new URL(PARCEL_QUERY_URL);
+  url.searchParams.set("where", `PIN='${pin}'`);
+  url.searchParams.set("outFields", "PIN");
+  url.searchParams.set("returnGeometry", "true");
+  url.searchParams.set("outSR", String(outSR));
+  url.searchParams.set("f", "json");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      return {
+        status: "unavailable",
+        message: `Allegheny County parcel geometry service returned HTTP ${response.status}.`,
+      };
+    }
+
+    const payload = (await response.json()) as EsriQueryResponse;
+    if (payload.error) {
+      return {
+        status: "unavailable",
+        message:
+          payload.error.message ??
+          "Allegheny County parcel geometry service returned an error.",
+      };
+    }
+
+    const match = (payload.features ?? []).find(
+      (feature) => readString(feature.attributes?.PIN) === pin,
+    );
+    const rings = match?.geometry?.rings;
+    if (!rings || rings.length === 0) {
+      return { status: "no_match" };
+    }
+
+    return {
+      status: "ok",
+      geometry: {
+        rings,
+        spatialReference: { wkid: outSR },
+      },
+    };
+  } catch (error) {
+    const aborted =
+      error instanceof Error &&
+      (error.name === "AbortError" || error.message.includes("abort"));
+
+    return {
+      status: "unavailable",
+      message: aborted
+        ? "Allegheny County parcel geometry service timed out."
+        : "Allegheny County parcel geometry service could not be reached.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}

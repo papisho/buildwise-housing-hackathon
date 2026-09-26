@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
+import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 
@@ -94,6 +95,7 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
           assessment={result.assessment}
         />
         <ZoningFacts zoning={result.zoning} />
+        <SiteConditions steepSlope={result.steepSlope} />
       </div>
     );
   }
@@ -319,6 +321,62 @@ function ZoningSource({ source }: { source: ZoningSource }) {
       </a>
       .
     </p>
+  );
+}
+
+function formatOverlapPercent(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+function SiteConditions({
+  steepSlope,
+}: {
+  steepSlope: SteepSlopeLookupResult;
+}) {
+  if (steepSlope.status === "not_evaluated") {
+    return (
+      <div className="mt-6" role="alert">
+        <h2 className="text-lg font-medium">Site conditions</h2>
+        <p className="mt-2 text-sm">{steepSlope.message}</p>
+        <p className="mt-2 text-sm text-neutral-600">
+          Source failure is not treated as the absence of steep slope.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-medium">Site conditions</h2>
+      <p className="mt-2 text-sm">{steepSlope.message}</p>
+      {steepSlope.overlapPercent !== null ? (
+        <p className="mt-2 text-sm">
+          Overlap with mapped ≥25% slope:{" "}
+          {formatOverlapPercent(steepSlope.overlapPercent)}
+          {steepSlope.overlapAreaSqFt !== null
+            ? ` (${new Intl.NumberFormat("en-US").format(Math.round(steepSlope.overlapAreaSqFt))} sq ft)`
+            : ""}
+          . Calculated in EPSG:2272, not latitude/longitude.
+        </p>
+      ) : steepSlope.intersects ? (
+        <p className="mt-2 text-sm">
+          Overlap percentage could not be calculated reliably.
+        </p>
+      ) : null}
+      <p className="mt-2 text-sm text-neutral-600">
+        This is mapped GIS evidence only. It does not mean the parcel is unsafe,
+        prohibited, or unbuildable. Site-specific review may still be needed.
+      </p>
+      <p className="mt-3 text-sm text-neutral-600">
+        Source: {steepSlope.source.name}. Dataset last modified:{" "}
+        {steepSlope.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
+        {steepSlope.source.retrievedAt}. CRS: {steepSlope.source.crs}.{" "}
+        <a href={steepSlope.source.datasetUrl} className="underline">
+          WPRDC 25% or Greater Slope
+        </a>
+        .
+      </p>
+    </div>
   );
 }
 
