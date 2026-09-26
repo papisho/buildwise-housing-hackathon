@@ -165,46 +165,53 @@ async function querySlopePolygons(
 
 export async function findSteepSlopeForPin(
   pin: string,
+  parcelGeometry?: EsriPolygon,
 ): Promise<SteepSlopeLookupResult> {
-  const parcel = await findParcelEsriGeometryByPin(pin, PA_STATE_PLANE_SOUTH_FT);
-  if (parcel.status === "unavailable") {
-    return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
-  }
-  if (parcel.status === "no_match") {
-    return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
-  }
+  try {
+    const parcel = parcelGeometry
+      ? { status: "ok" as const, geometry: parcelGeometry }
+      : await findParcelEsriGeometryByPin(pin, PA_STATE_PLANE_SOUTH_FT);
+    if (parcel.status === "unavailable") {
+      return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
+    }
+    if (parcel.status === "no_match") {
+      return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
+    }
 
-  const slope = await querySlopePolygons(parcel.geometry);
-  if (slope.status === "unavailable") {
-    return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
-  }
+    const slope = await querySlopePolygons(parcel.geometry);
+    if (slope.status === "unavailable") {
+      return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
+    }
 
-  const source = await slopeSource();
-  const intersects = slope.rings.length > 0;
-  if (!intersects) {
+    const source = await slopeSource();
+    const intersects = slope.rings.length > 0;
+    if (!intersects) {
+      return {
+        status: "ok",
+        intersects: false,
+        overlapAreaSqFt: 0,
+        overlapPercent: 0,
+        message: steepSlopeMessage(false),
+        source,
+      };
+    }
+
+    const parcelArea = esriPolygonAreaSqFt(parcel.geometry.rings);
+    const overlapArea = intersectionAreaSqFt(parcel.geometry.rings, slope.rings);
+    const overlapPercent =
+      overlapArea !== null && parcelArea > 0
+        ? Math.min(100, (overlapArea / parcelArea) * 100)
+        : null;
+
     return {
       status: "ok",
-      intersects: false,
-      overlapAreaSqFt: 0,
-      overlapPercent: 0,
-      message: steepSlopeMessage(false),
+      intersects: true,
+      overlapAreaSqFt: overlapArea,
+      overlapPercent,
+      message: steepSlopeMessage(true),
       source,
     };
+  } catch {
+    return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
   }
-
-  const parcelArea = esriPolygonAreaSqFt(parcel.geometry.rings);
-  const overlapArea = intersectionAreaSqFt(parcel.geometry.rings, slope.rings);
-  const overlapPercent =
-    overlapArea !== null && parcelArea > 0
-      ? Math.min(100, (overlapArea / parcelArea) * 100)
-      : null;
-
-  return {
-    status: "ok",
-    intersects: true,
-    overlapAreaSqFt: overlapArea,
-    overlapPercent,
-    message: steepSlopeMessage(true),
-    source,
-  };
 }

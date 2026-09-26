@@ -1,5 +1,7 @@
 import { FindParcelForm } from "@/components/find-parcel-form";
 
+export const maxDuration = 120;
+
 export default function Home() {
   return (
     <main className="mx-auto max-w-2xl p-8">

@@ -1,5 +1,8 @@
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
+import type { FloodLookupResult } from "@/lib/hazards/flood";
+import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
+import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
 import {
   COVERAGE_THRESHOLDS,
@@ -34,10 +37,17 @@ function coverageLabel(percent: number): string {
   return "Insufficient evidence for reliable scoring";
 }
 
+function evaluatedOrUnavailable(ok: boolean): EvidenceState {
+  return ok ? "EVALUATED" : "SOURCE_UNAVAILABLE";
+}
+
 export function computeEvidenceCoverage(input: {
   assessment: AssessmentLookupResult;
   zoning: ZoningLookupResult;
   steepSlope: SteepSlopeLookupResult;
+  landslide: LandslideLookupResult;
+  undermined: UnderminedLookupResult;
+  flood: FloodLookupResult;
 }): CoverageResult {
   const items: CoverageItem[] = [
     {
@@ -50,7 +60,7 @@ export function computeEvidenceCoverage(input: {
       id: "propertyFacts",
       label: "Property facts",
       weight: COVERAGE_WEIGHTS.propertyFacts,
-      state: input.assessment.status === "ok" ? "EVALUATED" : "SOURCE_UNAVAILABLE",
+      state: evaluatedOrUnavailable(input.assessment.status === "ok"),
     },
     {
       id: "baseZoning",
@@ -65,25 +75,25 @@ export function computeEvidenceCoverage(input: {
       id: "steepSlope",
       label: "Steep slope",
       weight: COVERAGE_WEIGHTS.steepSlope,
-      state: input.steepSlope.status === "ok" ? "EVALUATED" : "SOURCE_UNAVAILABLE",
+      state: evaluatedOrUnavailable(input.steepSlope.status === "ok"),
     },
     {
       id: "landslide",
       label: "Landslide",
       weight: COVERAGE_WEIGHTS.landslide,
-      state: "NOT_EVALUATED",
+      state: evaluatedOrUnavailable(input.landslide.status === "ok"),
     },
     {
       id: "mine",
       label: "Mine / undermined",
       weight: COVERAGE_WEIGHTS.mine,
-      state: "NOT_EVALUATED",
+      state: evaluatedOrUnavailable(input.undermined.status === "ok"),
     },
     {
       id: "flood",
       label: "Flood",
       weight: COVERAGE_WEIGHTS.flood,
-      state: "NOT_EVALUATED",
+      state: evaluatedOrUnavailable(input.flood.status === "ok"),
     },
   ];
 

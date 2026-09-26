@@ -8,6 +8,7 @@ import {
 } from "@/lib/geocoder/census";
 import {
   findParcelByPoint,
+  findParcelEsriGeometryByPin,
   findParcelGeometryByPin,
   type CountyParcel,
 } from "@/lib/parcels/allegheny";
@@ -16,9 +17,21 @@ import {
   type ParcelAddressCandidate,
 } from "@/lib/parcels/disambiguate";
 import {
+  findFloodForPin,
+  type FloodLookupResult,
+} from "@/lib/hazards/flood";
+import {
+  findLandslideForPin,
+  type LandslideLookupResult,
+} from "@/lib/hazards/landslide";
+import {
   findSteepSlopeForPin,
   type SteepSlopeLookupResult,
 } from "@/lib/hazards/steep-slope";
+import {
+  findUnderminedForPin,
+  type UnderminedLookupResult,
+} from "@/lib/hazards/undermined";
 import {
   buildDecisionSnapshot,
   type DecisionSnapshot,
@@ -36,6 +49,9 @@ export type AddressToParcelResult =
       assessment: AssessmentLookupResult;
       zoning: ZoningLookupResult;
       steepSlope: SteepSlopeLookupResult;
+      landslide: LandslideLookupResult;
+      undermined: UnderminedLookupResult;
+      flood: FloodLookupResult;
       decision: DecisionSnapshot;
     }
   | {
@@ -94,6 +110,51 @@ async function lookupZoningForPin(pin: string): Promise<ZoningLookupResult> {
     };
   }
   return findZoningForParcelGeometry(geometry.geometry);
+}
+
+async function lookupSiteEvidence(pin: string): Promise<{
+  assessment: AssessmentLookupResult;
+  zoning: ZoningLookupResult;
+  steepSlope: SteepSlopeLookupResult;
+  landslide: LandslideLookupResult;
+  undermined: UnderminedLookupResult;
+  flood: FloodLookupResult;
+}> {
+  const parcelGeometry = await findParcelEsriGeometryByPin(pin, 2272);
+  const geometry =
+    parcelGeometry.status === "ok" ? parcelGeometry.geometry : undefined;
+
+  const [assessment, zoning, steepSlope, landslide, undermined, flood] =
+    await Promise.all([
+      findAssessmentByParid(pin),
+      lookupZoningForPin(pin),
+      findSteepSlopeForPin(pin, geometry).catch(
+        (): SteepSlopeLookupResult => ({
+          status: "not_evaluated",
+          message: "Steep slope: Not Evaluated",
+        }),
+      ),
+      findLandslideForPin(pin, geometry).catch(
+        (): LandslideLookupResult => ({
+          status: "not_evaluated",
+          message: "Landslide: Not Evaluated",
+        }),
+      ),
+      findUnderminedForPin(pin, geometry).catch(
+        (): UnderminedLookupResult => ({
+          status: "not_evaluated",
+          message: "Mine / undermined: Not Evaluated",
+        }),
+      ),
+      findFloodForPin(pin, geometry).catch(
+        (): FloodLookupResult => ({
+          status: "not_evaluated",
+          message: "Flood: Not Evaluated",
+        }),
+      ),
+    ]);
+
+  return { assessment, zoning, steepSlope, landslide, undermined, flood };
 }
 
 export async function findParcelForAddress(
@@ -171,19 +232,13 @@ export async function findParcelForAddress(
     );
 
     if (disambiguated.status === "ok") {
-      const [assessment, zoning, steepSlope] = await Promise.all([
-        findAssessmentByParid(disambiguated.parcel.pin),
-        lookupZoningForPin(disambiguated.parcel.pin),
-        findSteepSlopeForPin(disambiguated.parcel.pin),
-      ]);
+      const evidence = await lookupSiteEvidence(disambiguated.parcel.pin);
       return {
         status: "ok",
         census,
         parcel: disambiguated.parcel,
-        assessment,
-        zoning,
-        steepSlope,
-        decision: buildDecisionSnapshot({ assessment, zoning, steepSlope }),
+        ...evidence,
+        decision: buildDecisionSnapshot(evidence),
       };
     }
 
@@ -196,19 +251,13 @@ export async function findParcelForAddress(
     };
   }
 
-  const [assessment, zoning, steepSlope] = await Promise.all([
-    findAssessmentByParid(parcelLookup.parcel.pin),
-    lookupZoningForPin(parcelLookup.parcel.pin),
-    findSteepSlopeForPin(parcelLookup.parcel.pin),
-  ]);
+  const evidence = await lookupSiteEvidence(parcelLookup.parcel.pin);
 
   return {
     status: "ok",
     census,
     parcel: parcelLookup.parcel,
-    assessment,
-    zoning,
-    steepSlope,
-    decision: buildDecisionSnapshot({ assessment, zoning, steepSlope }),
+    ...evidence,
+    decision: buildDecisionSnapshot(evidence),
   };
 }

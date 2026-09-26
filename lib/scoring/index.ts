@@ -1,5 +1,8 @@
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
+import type { FloodLookupResult } from "@/lib/hazards/flood";
+import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
+import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
 import { COVERAGE_THRESHOLDS, SCORING_VERSION } from "@/lib/scoring/config";
 import {
@@ -79,10 +82,28 @@ export function buildDecisionSnapshot(input: {
   assessment: AssessmentLookupResult;
   zoning: ZoningLookupResult;
   steepSlope: SteepSlopeLookupResult;
+  landslide: LandslideLookupResult;
+  undermined: UnderminedLookupResult;
+  flood: FloodLookupResult;
 }): DecisionSnapshot {
   const coverage = computeEvidenceCoverage(input);
   const score = computeProvisionalScore(input.steepSlope);
-  const flags = buildCriticalFlags(input.steepSlope);
+  const flags = buildCriticalFlags(input);
+  const evidenceGaps: EvidenceGap[] = [];
+
+  if (input.landslide.status !== "ok") {
+    evidenceGaps.push({ label: "Landslide", state: "NOT_EVALUATED" });
+  }
+  if (input.undermined.status !== "ok") {
+    evidenceGaps.push({ label: "Mine / undermined", state: "NOT_EVALUATED" });
+  }
+  if (input.flood.status !== "ok") {
+    evidenceGaps.push({ label: "Flood", state: "NOT_EVALUATED" });
+  }
+  evidenceGaps.push({
+    label: "Detailed zoning/use compatibility",
+    state: "NOT_EVALUATED",
+  });
 
   return {
     scoringVersion: SCORING_VERSION,
@@ -90,11 +111,6 @@ export function buildDecisionSnapshot(input: {
     presentation: buildScorePresentation(coverage.percent, score),
     coverage,
     flags,
-    evidenceGaps: [
-      { label: "Landslide", state: "NOT_EVALUATED" },
-      { label: "Mine / undermined", state: "NOT_EVALUATED" },
-      { label: "Flood", state: "NOT_EVALUATED" },
-      { label: "Detailed zoning/use compatibility", state: "NOT_EVALUATED" },
-    ],
+    evidenceGaps,
   };
 }

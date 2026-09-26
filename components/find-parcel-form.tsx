@@ -1,42 +1,36 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { findParcelAction } from "@/app/find-parcel-action";
 import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
+import {
+  floodSourceLinkLabel,
+  type FloodLookupResult,
+} from "@/lib/hazards/flood";
+import type { HazardSource } from "@/lib/hazards/arcgis";
+import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
+import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 
 export function FindParcelForm() {
   const [address, setAddress] = useState("");
-  const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<AddressToParcelResult | null>(null);
-  const [requestError, setRequestError] = useState<string | null>(null);
+  const [result, formAction, pending] = useActionState(
+    findParcelAction,
+    null,
+  );
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPending(true);
-    setRequestError(null);
-    setResult(null);
-
-    try {
-      const response = await fetch("/api/find-parcel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
-      });
-      const payload = (await response.json()) as AddressToParcelResult;
-      setResult(payload);
-    } catch {
-      setRequestError("The parcel lookup request failed. Try again.");
-    } finally {
-      setPending(false);
+  useEffect(() => {
+    if (result && "census" in result) {
+      setAddress(result.census.matchedAddress);
     }
-  }
+  }, [result]);
 
   return (
     <section className="mt-8">
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <form action={formAction} className="flex flex-col gap-3">
         <label htmlFor="address" className="text-sm font-medium">
           Pittsburgh street address
         </label>
@@ -48,20 +42,21 @@ export function FindParcelForm() {
           onChange={(event) => setAddress(event.target.value)}
           placeholder="414 Grant Street, Pittsburgh, PA 15219"
           autoComplete="street-address"
+          required
           className="border border-neutral-300 px-3 py-2"
         />
         <button
           type="submit"
           disabled={pending}
-          className="w-fit border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+          className="w-fit cursor-pointer border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm text-white disabled:cursor-wait disabled:opacity-80"
         >
           {pending ? "Finding parcel…" : "Find Parcel"}
         </button>
       </form>
-
-      {requestError ? (
-        <p className="mt-4 text-sm text-red-700" role="alert">
-          {requestError}
+      {pending ? (
+        <p className="mt-4 text-sm" role="status">
+          Looking up parcel, zoning, and site conditions. This can take about 30
+          seconds.
         </p>
       ) : null}
 
@@ -97,7 +92,12 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
           assessment={result.assessment}
         />
         <ZoningFacts zoning={result.zoning} />
-        <SiteConditions steepSlope={result.steepSlope} />
+        <SiteConditions
+          steepSlope={result.steepSlope}
+          landslide={result.landslide}
+          undermined={result.undermined}
+          flood={result.flood}
+        />
         <EvidenceGaps decision={result.decision} />
       </div>
     );
@@ -167,7 +167,7 @@ function DecisionSnapshotCard({ decision }: { decision: DecisionSnapshot }) {
           ) : null}
         </div>
         <div>
-          <p className="text-sm text-neutral-600">Evidence Coverage</p>
+          <p className="text-sm text-neutral-600">Core Evidence Coverage</p>
           <p className="text-lg font-medium">{decision.coverage.percent}%</p>
           <p className="mt-1 text-sm">{decision.coverage.label}</p>
         </div>
@@ -402,15 +402,103 @@ function formatOverlapPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+function HazardSourceLine({
+  source,
+  linkLabel,
+}: {
+  source: HazardSource;
+  linkLabel: string;
+}) {
+  return (
+    <p className="mt-2 text-sm text-neutral-600">
+      Source: {source.name}.{" "}
+      {source.mapVintage ? (
+        <>
+          Map vintage: {source.mapVintage} (not current FEMA NFHL). Dataset last
+          modified: {source.sourceLastModified ?? "not reported"}.{" "}
+        </>
+      ) : (
+        <>
+          Dataset last modified: {source.sourceLastModified ?? "not reported"}.{" "}
+        </>
+      )}
+      Retrieved {source.retrievedAt}. CRS: {source.crs}.{" "}
+      <a href={source.datasetUrl} className="underline">
+        {linkLabel}
+      </a>
+      .
+    </p>
+  );
+}
+
+function HazardOverlap({
+  overlapPercent,
+  overlapAreaSqFt,
+  intersects,
+  label,
+}: {
+  overlapPercent: number | null;
+  overlapAreaSqFt: number | null;
+  intersects: boolean;
+  label: string;
+}) {
+  if (overlapPercent !== null) {
+    return (
+      <p className="mt-2 text-sm">
+        Overlap with {label}: {formatOverlapPercent(overlapPercent)}
+        {overlapAreaSqFt !== null
+          ? ` (${new Intl.NumberFormat("en-US").format(Math.round(overlapAreaSqFt))} sq ft)`
+          : ""}
+        . Calculated in EPSG:2272, not latitude/longitude.
+      </p>
+    );
+  }
+  if (intersects) {
+    return (
+      <p className="mt-2 text-sm">
+        Overlap percentage could not be calculated reliably.
+      </p>
+    );
+  }
+  return null;
+}
+
 function SiteConditions({
+  steepSlope,
+  landslide,
+  undermined,
+  flood,
+}: {
+  steepSlope: SteepSlopeLookupResult;
+  landslide: LandslideLookupResult;
+  undermined: UnderminedLookupResult;
+  flood: FloodLookupResult;
+}) {
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-medium">Site / environmental conditions</h2>
+      <p className="mt-2 text-sm text-neutral-600">
+        Mapped GIS evidence only. Missing or failed sources are not treated as
+        favorable. These findings do not mean a parcel is unsafe, prohibited, or
+        unbuildable.
+      </p>
+      <SteepSlopeBlock steepSlope={steepSlope} />
+      <LandslideBlock landslide={landslide} />
+      <UnderminedBlock undermined={undermined} />
+      <FloodBlock flood={flood} />
+    </div>
+  );
+}
+
+function SteepSlopeBlock({
   steepSlope,
 }: {
   steepSlope: SteepSlopeLookupResult;
 }) {
   if (steepSlope.status === "not_evaluated") {
     return (
-      <div className="mt-6" role="alert">
-        <h2 className="text-lg font-medium">Site conditions</h2>
+      <div className="mt-4" role="alert">
+        <h3 className="text-sm font-medium">Steep slope — Not Evaluated</h3>
         <p className="mt-2 text-sm">{steepSlope.message}</p>
         <p className="mt-2 text-sm text-neutral-600">
           Source failure is not treated as the absence of steep slope.
@@ -420,36 +508,159 @@ function SiteConditions({
   }
 
   return (
-    <div className="mt-6">
-      <h2 className="text-lg font-medium">Site conditions</h2>
+    <div className="mt-4">
+      <h3 className="text-sm font-medium">Steep slope — Evaluated</h3>
       <p className="mt-2 text-sm">{steepSlope.message}</p>
-      {steepSlope.overlapPercent !== null ? (
-        <p className="mt-2 text-sm">
-          Overlap with mapped ≥25% slope:{" "}
-          {formatOverlapPercent(steepSlope.overlapPercent)}
-          {steepSlope.overlapAreaSqFt !== null
-            ? ` (${new Intl.NumberFormat("en-US").format(Math.round(steepSlope.overlapAreaSqFt))} sq ft)`
-            : ""}
-          . Calculated in EPSG:2272, not latitude/longitude.
+      <HazardOverlap
+        overlapPercent={steepSlope.overlapPercent}
+        overlapAreaSqFt={steepSlope.overlapAreaSqFt}
+        intersects={steepSlope.intersects}
+        label="mapped ≥25% slope"
+      />
+      <HazardSourceLine
+        source={steepSlope.source}
+        linkLabel="WPRDC 25% or Greater Slope"
+      />
+    </div>
+  );
+}
+
+function LandslideBlock({
+  landslide,
+}: {
+  landslide: LandslideLookupResult;
+}) {
+  if (landslide.status === "not_evaluated") {
+    return (
+      <div className="mt-4" role="alert">
+        <h3 className="text-sm font-medium">Landslide — Not Evaluated</h3>
+        <p className="mt-2 text-sm">{landslide.message}</p>
+        <p className="mt-2 text-sm text-neutral-600">
+          Source failure is not treated as the absence of landslide-prone area.
         </p>
-      ) : steepSlope.intersects ? (
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-medium">Landslide — Evaluated</h3>
+      <p className="mt-2 text-sm">{landslide.message}</p>
+      <HazardOverlap
+        overlapPercent={landslide.overlapPercent}
+        overlapAreaSqFt={landslide.overlapAreaSqFt}
+        intersects={landslide.intersects}
+        label="mapped landslide-prone area"
+      />
+      <HazardSourceLine
+        source={landslide.source}
+        linkLabel="WPRDC Landslide-Prone Areas"
+      />
+    </div>
+  );
+}
+
+function UnderminedBlock({
+  undermined,
+}: {
+  undermined: UnderminedLookupResult;
+}) {
+  if (undermined.status === "not_evaluated") {
+    return (
+      <div className="mt-4" role="alert">
+        <h3 className="text-sm font-medium">Mine / undermined — Not Evaluated</h3>
+        <p className="mt-2 text-sm">{undermined.message}</p>
+        <p className="mt-2 text-sm text-neutral-600">
+          Source failure is not treated as the absence of undermined/mine
+          condition.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-medium">Mine / undermined — Evaluated</h3>
+      <p className="mt-2 text-sm">{undermined.message}</p>
+      {undermined.classifications.length > 0 ? (
         <p className="mt-2 text-sm">
-          Overlap percentage could not be calculated reliably.
+          Source classification: {undermined.classifications.join(", ")}.
         </p>
       ) : null}
-      <p className="mt-2 text-sm text-neutral-600">
-        This is mapped GIS evidence only. It does not mean the parcel is unsafe,
-        prohibited, or unbuildable. Site-specific review may still be needed.
-      </p>
-      <p className="mt-3 text-sm text-neutral-600">
-        Source: {steepSlope.source.name}. Dataset last modified:{" "}
-        {steepSlope.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-        {steepSlope.source.retrievedAt}. CRS: {steepSlope.source.crs}.{" "}
-        <a href={steepSlope.source.datasetUrl} className="underline">
-          WPRDC 25% or Greater Slope
-        </a>
-        .
-      </p>
+      <HazardOverlap
+        overlapPercent={undermined.overlapPercent}
+        overlapAreaSqFt={undermined.overlapAreaSqFt}
+        intersects={undermined.intersects}
+        label="mapped undermined area"
+      />
+      <HazardSourceLine
+        source={undermined.source}
+        linkLabel="WPRDC Undermined Areas"
+      />
+    </div>
+  );
+}
+
+function FloodBlock({ flood }: { flood: FloodLookupResult }) {
+  if (flood.status === "not_evaluated") {
+    return (
+      <div className="mt-4" role="alert">
+        <h3 className="text-sm font-medium">Flood — Not Evaluated</h3>
+        <p className="mt-2 text-sm">{flood.message}</p>
+        <p className="mt-2 text-sm text-neutral-600">
+          Source failure is not treated as the absence of flood hazard.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-medium">
+        {flood.provenance === "wprdc_2014_extract"
+          ? "Flood — Evaluated (2014 WPRDC FEMA extract)"
+          : "Flood — Evaluated"}
+      </h3>
+      <p className="mt-2 text-sm">{flood.message}</p>
+      {flood.zones.length > 0 ? (
+        <ul className="mt-2 list-disc pl-5 text-sm">
+          {flood.zones.map((zone) => (
+            <li
+              key={`${zone.fldZone ?? ""}-${zone.zoneSubtype ?? ""}-${zone.sfha ?? ""}`}
+            >
+              {zone.fldZone ? `Zone ${zone.fldZone}` : "Zone not reported"}
+              {zone.zoneSubtype ? ` · ${zone.zoneSubtype}` : ""}
+              {zone.sfha ? ` · SFHA ${zone.sfha}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <HazardOverlap
+        overlapPercent={flood.overlapPercent}
+        overlapAreaSqFt={flood.overlapAreaSqFt}
+        intersects={flood.intersects}
+        label="mapped FEMA flood hazard"
+      />
+      {flood.provenance === "living_atlas_secondary" ? (
+        <p className="mt-2 text-sm">
+          Secondary flood-hazard fallback. This is not a direct FEMA NFHL query
+          and is not presented as direct FEMA evidence.
+        </p>
+      ) : flood.provenance === "wprdc_2014_extract" ? (
+        <p className="mt-2 text-sm">
+          Map vintage: 2014. City-published extract of official FEMA data from
+          that vintage. This is not current FEMA NFHL and is not a live NFHL
+          query.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm">
+          Authoritative primary source: FEMA National Flood Hazard Layer.
+        </p>
+      )}
+      <HazardSourceLine
+        source={flood.source}
+        linkLabel={floodSourceLinkLabel(flood.provenance)}
+      />
     </div>
   );
 }
