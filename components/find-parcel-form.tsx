@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import type { AssessmentLookupResult } from "@/lib/assessments/wprdc";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 
 export function FindParcelForm() {
@@ -87,6 +88,10 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
           <dt className="text-neutral-600">Calculated acreage</dt>
           <dd>{result.parcel.calculatedAcreage ?? "—"}</dd>
         </dl>
+        <AssessmentFacts
+          pin={result.parcel.pin}
+          assessment={result.assessment}
+        />
       </div>
     );
   }
@@ -116,6 +121,10 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
             <li key={parcel.pin}>
               PIN {parcel.pin}
               {parcel.mapBlockLot ? ` (${parcel.mapBlockLot})` : ""}
+              {parcel.assessmentAddress
+                ? ` — ${parcel.assessmentAddress}`
+                : " — no assessment address"}
+              {parcel.addressMatched ? " [address match]" : ""}
             </li>
           ))}
         </ul>
@@ -123,3 +132,112 @@ function LookupResult({ result }: { result: AddressToParcelResult }) {
     </div>
   );
 }
+
+function formatCountyAssessedValue(value: number | null): string {
+  if (value === null) {
+    return "Not reported";
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatLotArea(value: number | null): string {
+  if (value === null) {
+    return "Not reported";
+  }
+  return `${new Intl.NumberFormat("en-US").format(value)} sq ft`;
+}
+
+function AssessmentFacts({
+  pin,
+  assessment,
+}: {
+  pin: string;
+  assessment: AssessmentLookupResult;
+}) {
+  if (assessment.status !== "ok") {
+    return (
+      <div className="mt-6" role="alert">
+        <h2 className="text-lg font-medium">Parcel facts</h2>
+        <p className="mt-2 text-sm">{assessment.message}</p>
+      </div>
+    );
+  }
+
+  const facts = assessment.facts;
+  const classLabel = [facts.classDescription, facts.classCode]
+    .filter(Boolean)
+    .join(" / ");
+  const sourceDate = [
+    facts.asOfDate,
+    facts.taxYear ? `tax year ${facts.taxYear}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="mt-6">
+      <h2 className="text-lg font-medium">Parcel facts</h2>
+      <p className="mt-1 text-sm text-neutral-600">
+        County assessed values are not market values.
+      </p>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-neutral-600">Parcel ID</dt>
+        <dd>{facts.parid}</dd>
+        <dt className="text-neutral-600">PIN / PARID match</dt>
+        <dd>
+          {facts.parid === pin
+            ? "PIN matches assessment PARID"
+            : "Mismatch"}
+        </dd>
+        <dt className="text-neutral-600">Property address</dt>
+        <dd>{facts.propertyAddress ?? "Not reported"}</dd>
+        <dt className="text-neutral-600">Municipality</dt>
+        <dd>{facts.municipality ?? facts.municipalityCode ?? "Not reported"}</dd>
+        <dt className="text-neutral-600">Class</dt>
+        <dd>{classLabel || "Not reported"}</dd>
+        <dt className="text-neutral-600">Current land use</dt>
+        <dd>{facts.useDescription ?? "Not reported"}</dd>
+        <dt className="text-neutral-600">Lot area</dt>
+        <dd>{formatLotArea(facts.lotArea)}</dd>
+        <dt className="text-neutral-600">County assessed land value</dt>
+        <dd>{formatCountyAssessedValue(facts.countyAssessedLandValue)}</dd>
+        <dt className="text-neutral-600">County assessed building value</dt>
+        <dd>{formatCountyAssessedValue(facts.countyAssessedBuildingValue)}</dd>
+        <dt className="text-neutral-600">County assessed total</dt>
+        <dd>{formatCountyAssessedValue(facts.countyAssessedTotal)}</dd>
+        {facts.yearBuilt !== null ? (
+          <>
+            <dt className="text-neutral-600">Year built</dt>
+            <dd>{facts.yearBuilt}</dd>
+          </>
+        ) : null}
+        {facts.stories !== null ? (
+          <>
+            <dt className="text-neutral-600">Stories</dt>
+            <dd>{facts.stories}</dd>
+          </>
+        ) : null}
+        {facts.finishedLivingArea !== null ? (
+          <>
+            <dt className="text-neutral-600">Finished living area</dt>
+            <dd>
+              {new Intl.NumberFormat("en-US").format(facts.finishedLivingArea)} sq
+              ft
+            </dd>
+          </>
+        ) : null}
+        {sourceDate ? (
+          <>
+            <dt className="text-neutral-600">Assessment / source date</dt>
+            <dd>{sourceDate}</dd>
+          </>
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+

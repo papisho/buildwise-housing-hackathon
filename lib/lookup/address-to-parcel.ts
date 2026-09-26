@@ -1,4 +1,8 @@
 import {
+  findAssessmentByParid,
+  type AssessmentLookupResult,
+} from "@/lib/assessments/wprdc";
+import {
   geocodeOneLineAddress,
   type CensusMatch,
 } from "@/lib/geocoder/census";
@@ -6,12 +10,17 @@ import {
   findParcelByPoint,
   type CountyParcel,
 } from "@/lib/parcels/allegheny";
+import {
+  disambiguateParcelsByAssessmentAddress,
+  type ParcelAddressCandidate,
+} from "@/lib/parcels/disambiguate";
 
 export type AddressToParcelResult =
   | {
       status: "ok";
       census: CensusMatch;
       parcel: CountyParcel;
+      assessment: AssessmentLookupResult;
     }
   | {
       status: "invalid_input";
@@ -44,7 +53,7 @@ export type AddressToParcelResult =
       status: "ambiguous_parcel_match";
       message: string;
       census: CensusMatch;
-      parcels: CountyParcel[];
+      parcels: ParcelAddressCandidate[];
     }
   | {
       status: "parcel_unavailable";
@@ -124,18 +133,37 @@ export async function findParcelForAddress(
   }
 
   if (parcelLookup.status === "ambiguous") {
+    const disambiguated = await disambiguateParcelsByAssessmentAddress(
+      parcelLookup.parcels,
+      address,
+      census.matchedAddress,
+    );
+
+    if (disambiguated.status === "ok") {
+      const assessment = await findAssessmentByParid(disambiguated.parcel.pin);
+      return {
+        status: "ok",
+        census,
+        parcel: disambiguated.parcel,
+        assessment,
+      };
+    }
+
     return {
       status: "ambiguous_parcel_match",
       message:
-        "More than one County parcel intersects this location. A parcel was not selected.",
+        "More than one County parcel intersects this location, and assessment addresses did not identify a single match. A parcel was not selected.",
       census,
-      parcels: parcelLookup.parcels,
+      parcels: disambiguated.candidates,
     };
   }
+
+  const assessment = await findAssessmentByParid(parcelLookup.parcel.pin);
 
   return {
     status: "ok",
     census,
     parcel: parcelLookup.parcel,
+    assessment,
   };
 }

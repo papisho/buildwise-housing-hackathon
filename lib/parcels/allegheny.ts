@@ -49,6 +49,12 @@ function readNumber(value: ArcGisAttributeValue | undefined): number | null {
   return null;
 }
 
+const NORMAL_PARCEL_PIN = /^[A-Za-z0-9]{16}$/;
+
+function isNormalParcelPin(pin: string): boolean {
+  return NORMAL_PARCEL_PIN.test(pin);
+}
+
 function parseParcel(feature: ArcGisFeature): CountyParcel | null {
   const pin = readString(feature.attributes?.PIN);
   if (!pin) {
@@ -61,6 +67,17 @@ function parseParcel(feature: ArcGisFeature): CountyParcel | null {
     municipalityCode: readNumber(feature.attributes?.MUNICODE),
     calculatedAcreage: readNumber(feature.attributes?.CALCACREAGE),
   };
+}
+
+function selectNormalParcels(candidates: CountyParcel[]): CountyParcel[] {
+  const unique = new Map<string, CountyParcel>();
+  for (const candidate of candidates) {
+    if (!isNormalParcelPin(candidate.pin)) {
+      continue;
+    }
+    unique.set(candidate.pin, candidate);
+  }
+  return [...unique.values()];
 }
 
 async function queryParcelsAtPoint(
@@ -117,9 +134,11 @@ async function queryParcelsAtPoint(
       };
     }
 
-    const parcels = (payload.features ?? [])
-      .map(parseParcel)
-      .filter((parcel): parcel is CountyParcel => parcel !== null);
+    const parcels = selectNormalParcels(
+      (payload.features ?? [])
+        .map(parseParcel)
+        .filter((parcel): parcel is CountyParcel => parcel !== null),
+    );
 
     if (parcels.length === 0) {
       return { status: "no_match" };
