@@ -4,21 +4,17 @@ export const maxDuration = 120;
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold">BuildWise</h1>
-      <p className="mt-2 text-sm text-neutral-600">
-        AI Horizons 2026 — AI for Housing Hackathon
+      <p className="mt-2 text-sm">
+        Know what could complicate a housing site before deeper due diligence.
       </p>
-      <p className="mt-1 text-sm text-neutral-600">
-        Track 1 — Development Feasibility Navigator
+      <p className="mt-4 text-sm text-neutral-600">
+        Currently supports City of Pittsburgh parcels.
       </p>
-      <p className="mt-6">
-        Preliminary decision-support for small and mid-sized housing developers
-        screening sites in the City of Pittsburgh.
-      </p>
-      <p className="mt-4 text-sm text-neutral-500">
-        This tool is not legal, zoning, engineering, environmental, or financial
-        advice.
+      <p className="mt-2 text-sm text-neutral-500">
+        Decision support only. This tool is not legal, zoning, engineering,
+        environmental, or financial advice.
       </p>
       <FindParcelForm />
     </main>

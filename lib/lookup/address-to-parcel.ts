@@ -33,21 +33,36 @@ import {
   type UnderminedLookupResult,
 } from "@/lib/hazards/undermined";
 import {
+  parseProposedProjectType,
+  type ProposedProjectType,
+} from "@/lib/project-type";
+import {
   buildDecisionSnapshot,
   type DecisionSnapshot,
 } from "@/lib/scoring";
+import {
+  evaluateUseCompatibility,
+  type UseCompatibilityResult,
+} from "@/lib/zoning/compatibility";
 import {
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
 
+export type AnalysisRequest = {
+  inputAddress: string;
+  proposedProjectType: ProposedProjectType;
+};
+
 export type AddressToParcelResult =
   | {
       status: "ok";
+      request: AnalysisRequest;
       census: CensusMatch;
       parcel: CountyParcel;
       assessment: AssessmentLookupResult;
       zoning: ZoningLookupResult;
+      useCompatibility: UseCompatibilityResult;
       steepSlope: SteepSlopeLookupResult;
       landslide: LandslideLookupResult;
       undermined: UnderminedLookupResult;
@@ -159,8 +174,13 @@ async function lookupSiteEvidence(pin: string): Promise<{
 
 export async function findParcelForAddress(
   rawAddress: string,
+  proposedProjectType: ProposedProjectType = "general_screening",
 ): Promise<AddressToParcelResult> {
   const address = rawAddress.trim();
+  const request: AnalysisRequest = {
+    inputAddress: address,
+    proposedProjectType: parseProposedProjectType(proposedProjectType),
+  };
   if (!address) {
     return {
       status: "invalid_input",
@@ -233,12 +253,21 @@ export async function findParcelForAddress(
 
     if (disambiguated.status === "ok") {
       const evidence = await lookupSiteEvidence(disambiguated.parcel.pin);
+      const useCompatibility = evaluateUseCompatibility({
+        proposedProjectType: request.proposedProjectType,
+        zoning: evidence.zoning,
+      });
       return {
         status: "ok",
+        request,
         census,
         parcel: disambiguated.parcel,
         ...evidence,
-        decision: buildDecisionSnapshot(evidence),
+        useCompatibility,
+        decision: buildDecisionSnapshot({
+          ...evidence,
+          useCompatibility,
+        }),
       };
     }
 
@@ -252,12 +281,21 @@ export async function findParcelForAddress(
   }
 
   const evidence = await lookupSiteEvidence(parcelLookup.parcel.pin);
+  const useCompatibility = evaluateUseCompatibility({
+    proposedProjectType: request.proposedProjectType,
+    zoning: evidence.zoning,
+  });
 
   return {
     status: "ok",
+    request,
     census,
     parcel: parcelLookup.parcel,
     ...evidence,
-    decision: buildDecisionSnapshot(evidence),
+    useCompatibility,
+    decision: buildDecisionSnapshot({
+      ...evidence,
+      useCompatibility,
+    }),
   };
 }

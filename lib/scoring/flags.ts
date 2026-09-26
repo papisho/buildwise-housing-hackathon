@@ -2,13 +2,15 @@ import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
+import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
 import { FLAG_OVERLAP_THRESHOLD_PERCENT } from "@/lib/scoring/config";
 
 export type CriticalFlagType =
   | "STEEP_SLOPE_REVIEW"
   | "LANDSLIDE_REVIEW"
   | "MINE_UNDERMINED_REVIEW"
-  | "FLOOD_REVIEW";
+  | "FLOOD_REVIEW"
+  | "ZONING_USE_REVIEW";
 
 export type CriticalFlag = {
   type: CriticalFlagType;
@@ -45,8 +47,27 @@ export function buildCriticalFlags(input: {
   landslide: LandslideLookupResult;
   undermined: UnderminedLookupResult;
   flood: FloodLookupResult;
+  useCompatibility?: UseCompatibilityResult;
 }): CriticalFlag[] {
   const flags: CriticalFlag[] = [];
+  const zoning = input.useCompatibility;
+  if (
+    zoning &&
+    zoning.overallStatus !== "NOT_EVALUATED" &&
+    zoning.overallStatus !== "PERMITTED_BY_RIGHT"
+  ) {
+    flags.push({
+      type: "ZONING_USE_REVIEW",
+      level: "REVIEW",
+      title: "Zoning use-table review",
+      finding: `Preliminary § 911.02 status: ${zoning.overallStatus} for ${zoning.proposedUseLabel}.`,
+      whyItMatters:
+        "This is a first-pass encoding of the published use table. It is not a determination that a use is permitted, approved, or prohibited as an entitlement.",
+      verificationAction:
+        "Verify the proposed use against Pittsburgh Zoning Code § 911.02, any cited use standards, overlays, and City Planning / Zoning Administrator interpretation.",
+      overlapPercent: null,
+    });
+  }
 
   if (input.steepSlope.status === "ok") {
     const overlap = input.steepSlope.overlapPercent;
