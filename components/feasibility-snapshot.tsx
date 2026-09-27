@@ -23,6 +23,7 @@ import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 import type { ClaudeExplanationResult } from "@/lib/claude/types";
 import { FinancialContextWithChat } from "@/components/financial-feasibility";
 import { ParcelEvidenceMap } from "@/components/parcel-evidence-map";
+import { ResultJumpNav, SourceDisclosure } from "@/components/result-chrome";
 import { StatusBadge } from "@/components/status-badge";
 
 type OkResult = Extract<AddressToParcelResult, { status: "ok" }>;
@@ -44,79 +45,136 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
       : null;
   const enteredAddress = result.request.inputAddress;
   const geocodedAddress = result.census.matchedAddress;
-  const addressesDiffer =
-    Boolean(assessmentAddress) &&
-    streetKeysDiffer(enteredAddress, geocodedAddress, assessmentAddress);
+  const houseNumberZero =
+    result.assessment.status === "ok" &&
+    result.assessment.facts.houseNumber === "0";
+  const addressesDiffer = streetKeysDiffer(
+    enteredAddress,
+    geocodedAddress,
+    assessmentAddress,
+  );
+  const showMatchedLabel = addressesDiffer || houseNumberZero;
 
   return (
     <div id="results" className="mt-8 scroll-mt-24">
       <p className="text-xs font-medium tracking-wide text-accent uppercase">
         Development Feasibility Snapshot
       </p>
+      {showMatchedLabel ? (
+        <p className="mt-2 text-sm font-medium text-ink">
+          Matched property address
+        </p>
+      ) : null}
       <h2 className="mt-1 text-2xl font-semibold tracking-tight">
         {geocodedAddress}
       </h2>
-      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-        <dt className="text-ink-muted">Entered address</dt>
-        <dd>{enteredAddress}</dd>
-        <dt className="text-ink-muted">Census geocoded address</dt>
-        <dd>{geocodedAddress}</dd>
-        <dt className="text-ink-muted">County assessment address</dt>
-        <dd>
-          {assessmentAddress ?? "Not reported for this PARID"}
-          {result.assessment.status === "ok" &&
-          result.assessment.facts.houseNumber === "0"
-            ? " (County house number is 0 for this PARID; this is the assessment record, not the entered address)"
-            : ""}
-        </dd>
-      </dl>
-      {addressesDiffer ? (
-        <p className="mt-2 text-sm text-ink-muted">
-          These three address strings are not assumed to be the same. Screening
-          is attached to PARID {result.parcel.pin}, not to the entered house
-          number alone.
-        </p>
-      ) : null}
       <p className="mt-1 text-sm text-ink-muted">
         PARID {result.parcel.pin}
-        {result.parcel.mapBlockLot
-          ? ` · MAPBLOCKLOT ${result.parcel.mapBlockLot}`
-          : ""}{" "}
-        · Proposed:{" "}
-        {proposedProjectTypeLabel(result.request.proposedProjectType)}
+        {" · "}
+        Proposed: {proposedProjectTypeLabel(result.request.proposedProjectType)}
       </p>
+      {addressesDiffer ? (
+        <p className="mt-2 text-sm text-ink-muted">
+          These address strings are not assumed to be the same. Screening is
+          attached to PARID {result.parcel.pin}, not to the entered house number
+          alone.
+        </p>
+      ) : null}
+      {houseNumberZero ? (
+        <p className="mt-2 text-sm text-ink-muted">
+          County house number is 0 for this PARID. The assessment record is not
+          the entered address.
+        </p>
+      ) : null}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm font-medium text-accent">
+          Parcel identity details
+        </summary>
+        <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+          <dt className="text-ink-muted">Entered address</dt>
+          <dd>{enteredAddress}</dd>
+          <dt className="text-ink-muted">Census geocoded address</dt>
+          <dd>{geocodedAddress}</dd>
+          <dt className="text-ink-muted">County assessment address</dt>
+          <dd>
+            {assessmentAddress ?? "Not reported for this PARID"}
+            {houseNumberZero
+              ? " (County house number is 0 for this PARID; this is the assessment record, not the entered address)"
+              : ""}
+          </dd>
+          {result.parcel.mapBlockLot ? (
+            <>
+              <dt className="text-ink-muted">MAPBLOCKLOT</dt>
+              <dd>{result.parcel.mapBlockLot}</dd>
+            </>
+          ) : null}
+        </dl>
+      </details>
       <p className="mt-2 text-sm text-ink-muted">
-        Scoring v{result.decision.scoringVersion}. {result.decision.heuristicLabel}{" "}
-        Decision support only; not legal, zoning, engineering, environmental, or
-        financial advice.
+        Decision support only — not legal, zoning, engineering, environmental,
+        or financial advice.{" "}
+        <a href="#result-scoring" className="text-accent underline">
+          How scoring works
+        </a>
       </p>
 
-      <SnapshotMetrics decision={result.decision} />
-      <CoverageWarning coveragePercent={result.decision.coverage.percent} />
-      <ParcelEvidenceMap data={result.evidenceMap} />
-      <ZoningEntitlement
-        zoning={result.zoning}
-        useCompatibility={result.useCompatibility}
-      />
-      <PhysicalSite
-        steepSlope={result.steepSlope}
-        landslide={result.landslide}
-        undermined={result.undermined}
-      />
-      <EnvironmentalConditions flood={result.flood} />
-      <HistoricDesignReview historicDesignation={result.historicDesignation} />
-      <RegulatoryContext regulatoryRecords={result.regulatoryRecords} />
+      <ResultJumpNav />
+
+      <div id="result-snapshot" className="scroll-mt-24">
+        <SnapshotMetrics decision={result.decision} />
+        <CoverageWarning coveragePercent={result.decision.coverage.percent} />
+      </div>
       <CriticalFlagsCard decision={result.decision} />
-      <EvidenceGapsCard gaps={result.decision.evidenceGaps} />
-      <HowScoringWorks decision={result.decision} />
       <RecommendedVerification steps={result.recommendedVerification} />
-      <AiExplanation aiSummary={result.aiSummary} />
+      <div id="result-map" className="scroll-mt-24">
+        <ParcelEvidenceMap data={result.evidenceMap} />
+      </div>
+
+      <section className="mt-10" aria-labelledby="regulatory-fit-heading">
+        <h2
+          id="regulatory-fit-heading"
+          className="text-xl font-semibold tracking-tight"
+        >
+          Regulatory Fit
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+          Mapped zoning, historic designation, and queried regulatory records.
+        </p>
+        <ZoningEntitlement
+          zoning={result.zoning}
+          useCompatibility={result.useCompatibility}
+        />
+        <div id="result-regulatory" className="scroll-mt-24">
+          <HistoricDesignReview
+            historicDesignation={result.historicDesignation}
+          />
+          <RegulatoryContext regulatoryRecords={result.regulatoryRecords} />
+        </div>
+      </section>
+
+      <section id="result-site" className="mt-10 scroll-mt-24">
+        <h2 className="text-xl font-semibold tracking-tight">Physical Site</h2>
+        <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+          Mapped steep slope, landslide, mine, and flood evidence. A missing
+          layer is not a clear site.
+        </p>
+        <PhysicalSite
+          steepSlope={result.steepSlope}
+          landslide={result.landslide}
+          undermined={result.undermined}
+        />
+        <EnvironmentalConditions flood={result.flood} />
+      </section>
+
       <FinancialContextWithChat
         financial={result.financialContext}
         claudeContext={result.claudeContext}
         sessionKey={`${result.parcel.pin}:${result.request.proposedProjectType}`}
+        interpretation={<AiExplanation aiSummary={result.aiSummary} />}
       />
+      <HowScoringWorks decision={result.decision} />
       <SourcesAndAssumptions result={result} />
+      <EvidenceGapsCard gaps={result.decision.evidenceGaps} />
       <ParcelFactsDetail
         pin={result.parcel.pin}
         assessment={result.assessment}
@@ -143,7 +201,7 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
           detail={
             presentation.mode === "incomplete"
               ? presentation.caveat
-              : "SME-informed heuristic. See How scoring works below."
+              : "SME-informed preliminary screening."
           }
         />
         <Metric
@@ -154,7 +212,7 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
         <Metric
           label="Core Evidence Coverage"
           value={`${decision.coverage.percent}%`}
-          detail={`${decision.coverage.label}. 100% means the implemented core evidence set was evaluated, not that full feasibility review is complete.`}
+          detail={`${decision.coverage.label}. Implemented core evidence only, not a complete feasibility review.`}
         />
         <Metric
           label="Critical Review Flags"
@@ -178,7 +236,12 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
             <dd>{decision.score.physicalSite.display}</dd>
           </div>
         </dl>
-        <p className="mt-2 text-xs text-ink-muted">{decision.heuristicLabel}</p>
+        <p className="mt-2 text-xs text-ink-muted">
+          Missing evidence is not treated as favorable.{" "}
+          <a href="#result-scoring" className="text-accent underline">
+            How scoring works
+          </a>
+        </p>
       </div>
     </>
   );
@@ -204,9 +267,11 @@ function Metric({
 
 function HowScoringWorks({ decision }: { decision: DecisionSnapshot }) {
   return (
-    <section className="bw-card mt-6 p-5">
+    <section id="result-scoring" className="bw-card mt-10 scroll-mt-24 p-5">
       <h2 className="text-lg font-semibold">How scoring works</h2>
-      <p className="mt-2 text-sm leading-6">{decision.heuristicLabel}</p>
+      <p className="mt-2 text-sm leading-6">
+        Scoring v{decision.scoringVersion}. {decision.heuristicLabel}
+      </p>
       <p className="mt-2 text-sm leading-6">
         A 0–100 Development Ease Score is published only when Regulatory Fit and
         all four physical factors were successfully evaluated. Missing or
@@ -255,9 +320,9 @@ function ZoningEntitlement({
 }) {
   if (zoning.status === "unavailable") {
     return (
-      <section className="bw-card mt-6 p-5" role="alert">
+      <section id="result-zoning" className="bw-card mt-6 scroll-mt-24 p-5" role="alert">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">Zoning & Entitlement</h2>
+          <h3 className="text-lg font-semibold">Zoning & Entitlement</h3>
           <StatusBadge>Not Evaluated</StatusBadge>
         </div>
         <p className="mt-2 text-sm leading-6">
@@ -270,9 +335,9 @@ function ZoningEntitlement({
 
   if (zoning.status === "no_district") {
     return (
-      <section className="bw-card mt-6 p-5" role="alert">
+      <section id="result-zoning" className="bw-card mt-6 scroll-mt-24 p-5" role="alert">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">Zoning & Entitlement</h2>
+          <h3 className="text-lg font-semibold">Zoning & Entitlement</h3>
           <StatusBadge tone="review">Requires Review</StatusBadge>
         </div>
         <p className="mt-2 text-sm leading-6">{zoning.message}</p>
@@ -283,10 +348,10 @@ function ZoningEntitlement({
   }
 
   return (
-    <section className="bw-card mt-6 p-5">
+    <section id="result-zoning" className="bw-card mt-6 scroll-mt-24 p-5">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold">Zoning & Entitlement</h2>
-        <StatusBadge tone="accent">Evaluated</StatusBadge>
+        <h3 className="text-lg font-semibold">Zoning & Entitlement</h3>
+        <StatusBadge>Evaluated</StatusBadge>
       </div>
       <p className="mt-2 text-sm text-ink-muted">
         Mapped GIS district only. This is not a determination that a use is
@@ -329,28 +394,28 @@ function ZoningEntitlement({
 function formatUseTableStatus(status: UseTableStatus): string {
   switch (status) {
     case "PERMITTED_BY_RIGHT":
-      return "PERMITTED_BY_RIGHT (P)";
+      return "Table symbol P";
     case "ADMINISTRATOR_EXCEPTION":
-      return "ADMINISTRATOR_EXCEPTION (A)";
+      return "Administrator exception (A)";
     case "SPECIAL_EXCEPTION":
-      return "SPECIAL_EXCEPTION (S)";
+      return "Special exception (S)";
     case "CONDITIONAL_USE":
-      return "CONDITIONAL_USE (C)";
+      return "Conditional use (C)";
     case "NOT_COMPATIBLE":
-      return "NOT_COMPATIBLE";
+      return "Not compatible in the encoded use table";
     case "NOT_IDENTIFIED":
-      return "NOT_IDENTIFIED";
+      return "Not identified";
     case "NOT_EVALUATED":
-      return "NOT_EVALUATED";
+      return "Not Evaluated";
     case "REQUIRES_VERIFICATION":
-      return "REQUIRES_VERIFICATION";
+      return "Requires verification";
   }
 }
 
 function UseTableStatusBadge({ status }: { status: UseTableStatus }) {
   switch (status) {
     case "PERMITTED_BY_RIGHT":
-      return <StatusBadge tone="accent">Permitted by Right</StatusBadge>;
+      return <StatusBadge>Permitted by Right</StatusBadge>;
     case "NOT_IDENTIFIED":
       return <StatusBadge>Not Identified</StatusBadge>;
     case "NOT_EVALUATED":
@@ -371,9 +436,9 @@ function UseCompatibilityBlock({
 }) {
   return (
     <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-      <h3 className="text-sm font-semibold">
+      <h4 className="text-sm font-semibold">
         Preliminary base-zoning use-table result
-      </h3>
+      </h4>
       <p className="mt-1 text-sm text-ink-muted">
         This is a first-pass encoding of Pittsburgh Zoning Code § 911.02. It is
         subject to use classification verification, dimensional standards,
@@ -447,7 +512,7 @@ function PhysicalSite({
 }) {
   return (
     <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">Physical Site Conditions</h2>
+      <h3 className="text-lg font-semibold">Physical Site Conditions</h3>
       <p className="mt-2 text-sm text-ink-muted">
         Mapped GIS evidence only. Missing or failed sources are not treated as
         favorable. These findings do not mean a parcel is prohibited or
@@ -463,7 +528,7 @@ function PhysicalSite({
 function EnvironmentalConditions({ flood }: { flood: FloodLookupResult }) {
   return (
     <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">Environmental Conditions</h2>
+      <h3 className="text-lg font-semibold">Environmental Conditions</h3>
       <FloodBlock flood={flood} />
     </section>
   );
@@ -501,24 +566,29 @@ function HistoricDesignReview({
   const reviewFlags = [
     historicDesignation.districts.status === "ok" &&
     historicDesignation.districts.intersects
-      ? "HISTORIC_DISTRICT_REVIEW"
+      ? "Historic district review"
       : null,
     historicDesignation.sites.status === "ok" &&
     historicDesignation.sites.intersects
-      ? "HISTORIC_SITE_REVIEW"
+      ? "Historic site review"
       : null,
   ].filter((flag): flag is string => Boolean(flag));
 
   return (
     <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">Historic / Design Review</h2>
+      <h3 className="text-lg font-semibold">Historic / Design Review</h3>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         {historicDesignation.overallStatusLabel}{" "}
-        <StatusBadge tone={tone}>
-          {historicDesignation.overallStatus.replaceAll("_", " ")}
+        <StatusBadge tone={tone === "accent" ? "neutral" : tone}>
+          {historicDesignation.overallStatus === "HISTORIC_STATUS_NOT_EVALUATED"
+            ? "Not Evaluated"
+            : historicDesignation.overallStatus ===
+                "NO_HISTORIC_DESIGNATION_IDENTIFIED"
+              ? "No mapped intersection"
+              : "Review required"}
         </StatusBadge>
         {historicDesignation.partialEvidence ? (
-          <StatusBadge tone="neutral">Partial / Not Evaluated</StatusBadge>
+          <StatusBadge>Partial / Not Evaluated</StatusBadge>
         ) : null}
       </p>
       {historicDesignation.partialEvidence ? (
@@ -581,31 +651,34 @@ function HistoricDesignReview({
           <dd>{historicDesignation.parcelId}</dd>
         </div>
       </dl>
-      <p className="mt-3 text-sm text-ink-muted">
-        District source:{" "}
-        <a
-          className="text-accent underline"
-          href={historicDesignation.districts.source.datasetUrl}
-        >
-          {historicDesignation.districts.source.name}
-        </a>
-        . Last modified:{" "}
-        {historicDesignation.districts.source.sourceLastModified ??
-          "not reported"}
-        . Retrieved {historicDesignation.districts.source.retrievedAt}.
-      </p>
-      <p className="mt-1 text-sm text-ink-muted">
-        Site source:{" "}
-        <a
-          className="text-accent underline"
-          href={historicDesignation.sites.source.datasetUrl}
-        >
-          {historicDesignation.sites.source.name}
-        </a>
-        . Last modified:{" "}
-        {historicDesignation.sites.source.sourceLastModified ?? "not reported"}
-        . Retrieved {historicDesignation.sites.source.retrievedAt}.
-      </p>
+      <SourceDisclosure
+        name={historicDesignation.districts.source.name}
+        lastModified={historicDesignation.districts.source.sourceLastModified}
+        href={historicDesignation.districts.source.datasetUrl}
+        linkLabel="Historic districts"
+        details={
+          <>
+            <p>
+              Retrieved {historicDesignation.districts.source.retrievedAt}.
+            </p>
+            <p>CRS: {historicDesignation.districts.source.crs}.</p>
+            <p>Query: {historicDesignation.districts.source.queryUrl}</p>
+          </>
+        }
+      />
+      <SourceDisclosure
+        name={historicDesignation.sites.source.name}
+        lastModified={historicDesignation.sites.source.sourceLastModified}
+        href={historicDesignation.sites.source.datasetUrl}
+        linkLabel="Historic sites"
+        details={
+          <>
+            <p>Retrieved {historicDesignation.sites.source.retrievedAt}.</p>
+            <p>CRS: {historicDesignation.sites.source.crs}.</p>
+            <p>Query: {historicDesignation.sites.source.queryUrl}</p>
+          </>
+        }
+      />
       <p className="mt-3 text-sm font-medium">Limitations</p>
       <ul className="mt-1 list-disc pl-5 text-sm text-ink-muted">
         {historicDesignation.limitations.map((limitation) => (
@@ -650,9 +723,9 @@ function RegulatoryContext({
 
   return (
     <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">Regulatory Context</h2>
+      <h3 className="text-lg font-semibold">Regulatory Context</h3>
       <div className="mt-5">
-        <h3 className="text-base font-semibold">Regulatory Records</h3>
+        <h4 className="text-base font-semibold">Regulatory Records</h4>
         <p className="mt-1 text-sm text-ink-muted">
           Separate from Core Evidence Coverage. Missing data is Not Evaluated,
           never favorable. No record found is not proof that no regulatory issue
@@ -664,8 +737,14 @@ function RegulatoryContext({
         </p>
         <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           Regulatory Records Status: {regulatoryRecords.overallStatusLabel}{" "}
-          <StatusBadge tone={overallTone}>
-            {regulatoryRecords.overallStatus.replaceAll("_", " ")}
+          <StatusBadge tone={overallTone === "accent" ? "neutral" : overallTone}>
+            {regulatoryRecords.overallStatus ===
+            "REGULATORY_RECORDS_NOT_EVALUATED"
+              ? "Not Evaluated"
+              : regulatoryRecords.overallStatus ===
+                  "NO_UNRESOLVED_RECORDS_IDENTIFIED"
+                ? "Evaluated"
+                : "Review required"}
           </StatusBadge>
         </p>
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
@@ -721,37 +800,29 @@ function PermitRecordsBlock({
           Permits — Not Evaluated. <StatusBadge>Not Evaluated</StatusBadge>
         </p>
         <p className="mt-1 text-sm text-ink-muted">{permits.message}</p>
-        <p className="mt-1 text-xs text-ink-muted">
-          Source: {permits.source.name}. {permits.source.temporalCoverage}.
-          Dataset last modified:{" "}
-          {permits.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-          {permits.source.retrievedAt}.{" "}
-          <a className="text-accent underline" href={permits.source.datasetUrl}>
-            WPRDC PLI Permits
-          </a>
-        </p>
+        <RegulatorySourceLine
+          source={permits.source}
+          linkLabel="WPRDC PLI Permits"
+        />
       </div>
     );
   }
 
-  const preview = permits.records.slice(0, 5);
-  const extra = permits.records.slice(5);
+  const { preview, extra } = partitionReviewRecords(permits.records);
 
   return (
     <div className="mt-4">
       <p className="flex flex-wrap items-center gap-2 text-sm">
         Permits — {permits.records.length} record(s) in the queried feed.{" "}
-        <StatusBadge tone={tone}>Evaluated</StatusBadge>
+        <StatusBadge tone={tone === "accent" ? "neutral" : tone}>
+          {tone === "review" ? "Review required" : "Evaluated"}
+        </StatusBadge>
       </p>
-      <p className="mt-1 text-xs text-ink-muted">
-        Source: {permits.source.name}. {permits.source.temporalCoverage}.
-        Dataset last modified:{" "}
-        {permits.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-        {permits.source.retrievedAt}. Join: {permits.joinMethod}.{" "}
-        <a className="text-accent underline" href={permits.source.datasetUrl}>
-          WPRDC PLI Permits
-        </a>
-      </p>
+      <RegulatorySourceLine
+        source={permits.source}
+        linkLabel="WPRDC PLI Permits"
+        joinMethod={permits.joinMethod}
+      />
       {preview.length === 0 ? (
         <p className="mt-2 text-sm">
           No permit records identified in the queried dataset for this parcel.
@@ -769,7 +840,7 @@ function PermitRecordsBlock({
           rows={preview.map((record) => [
             record.permitId,
             record.permitType ?? "—",
-            `${record.status ?? "not reported"} (${record.reviewClass})`,
+            reviewStatusLabel(record.status, record.reviewClass),
             record.issueDate ?? "—",
             record.completionDate ?? "not in source",
             record.workType ?? record.workDescription ?? "—",
@@ -793,7 +864,7 @@ function PermitRecordsBlock({
             rows={extra.map((record) => [
               record.permitId,
               record.permitType ?? "—",
-              `${record.status ?? "not reported"} (${record.reviewClass})`,
+              reviewStatusLabel(record.status, record.reviewClass),
               record.issueDate ?? "—",
               record.completionDate ?? "not in source",
               record.workType ?? record.workDescription ?? "—",
@@ -819,43 +890,30 @@ function ViolationRecordsBlock({
           Violations — Not Evaluated. <StatusBadge>Not Evaluated</StatusBadge>
         </p>
         <p className="mt-1 text-sm text-ink-muted">{violations.message}</p>
-        <p className="mt-1 text-xs text-ink-muted">
-          Source: {violations.source.name}. {violations.source.temporalCoverage}.
-          Dataset last modified:{" "}
-          {violations.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-          {violations.source.retrievedAt}.{" "}
-          <a
-            className="text-accent underline"
-            href={violations.source.datasetUrl}
-          >
-            WPRDC violations
-          </a>
-        </p>
+        <RegulatorySourceLine
+          source={violations.source}
+          linkLabel="WPRDC violations"
+        />
       </div>
     );
   }
 
-  const preview = violations.records.slice(0, 5);
-  const extra = violations.records.slice(5);
+  const { preview, extra } = partitionReviewRecords(violations.records);
 
   return (
     <div className="mt-4">
       <p className="flex flex-wrap items-center gap-2 text-sm">
         Violations — {violations.records.length} casefile(s) in the queried
-        feed. <StatusBadge tone={tone}>Evaluated</StatusBadge>
+        feed.{" "}
+        <StatusBadge tone={tone === "accent" ? "neutral" : tone}>
+          {tone === "review" ? "Review required" : "Evaluated"}
+        </StatusBadge>
       </p>
-      <p className="mt-1 text-xs text-ink-muted">
-        Source: {violations.source.name}. {violations.source.temporalCoverage}.
-        Dataset last modified:{" "}
-        {violations.source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-        {violations.source.retrievedAt}. Join: {violations.joinMethod}.{" "}
-        <a
-          className="text-accent underline"
-          href={violations.source.datasetUrl}
-        >
-          WPRDC violations
-        </a>
-      </p>
+      <RegulatorySourceLine
+        source={violations.source}
+        linkLabel="WPRDC violations"
+        joinMethod={violations.joinMethod}
+      />
       {preview.length === 0 ? (
         <p className="mt-2 text-sm">
           No violation casefiles identified in the queried dataset for this
@@ -874,7 +932,7 @@ function ViolationRecordsBlock({
           rows={preview.map((record) => [
             record.casefileNumber,
             record.department ?? "—",
-            `${record.status ?? "not reported"} (${record.reviewClass})`,
+            reviewStatusLabel(record.status, record.reviewClass),
             record.openedDate ?? "—",
             record.closedDate ?? "not in source",
             record.description ?? record.category ?? "—",
@@ -898,7 +956,7 @@ function ViolationRecordsBlock({
             rows={extra.map((record) => [
               record.casefileNumber,
               record.department ?? "—",
-              `${record.status ?? "not reported"} (${record.reviewClass})`,
+              reviewStatusLabel(record.status, record.reviewClass),
               record.openedDate ?? "—",
               record.closedDate ?? "not in source",
               record.description ?? record.category ?? "—",
@@ -907,6 +965,77 @@ function ViolationRecordsBlock({
         </details>
       ) : null}
     </div>
+  );
+}
+
+function gapStateLabel(state: string): string {
+  if (state === "NOT_EVALUATED") {
+    return "Not Evaluated";
+  }
+  if (state === "REQUIRES_FURTHER_DUE_DILIGENCE") {
+    return "Requires further due diligence";
+  }
+  return state.replaceAll("_", " ");
+}
+
+function reviewStatusLabel(
+  status: string | null,
+  reviewClass: string,
+): string {
+  const review =
+    reviewClass === "UNRESOLVED"
+      ? "Unresolved"
+      : reviewClass === "REQUIRES_VERIFICATION"
+        ? "Requires verification"
+        : reviewClass === "NOT_UNRESOLVED"
+          ? "Not unresolved"
+          : reviewClass;
+  return `${status ?? "not reported"} · ${review}`;
+}
+
+function partitionReviewRecords<T extends { reviewClass: string }>(records: T[]) {
+  const priority = records.filter(
+    (record) =>
+      record.reviewClass === "UNRESOLVED" ||
+      record.reviewClass === "REQUIRES_VERIFICATION",
+  );
+  const rest = records.filter(
+    (record) =>
+      record.reviewClass !== "UNRESOLVED" &&
+      record.reviewClass !== "REQUIRES_VERIFICATION",
+  );
+  const ordered = [...priority, ...rest];
+  const visibleCount = Math.max(5, priority.length);
+  return {
+    preview: ordered.slice(0, visibleCount),
+    extra: ordered.slice(visibleCount),
+  };
+}
+
+function RegulatorySourceLine({
+  source,
+  linkLabel,
+  joinMethod,
+}: {
+  source: RegulatoryRecordsResult["permits"]["source"];
+  linkLabel: string;
+  joinMethod?: string;
+}) {
+  return (
+    <SourceDisclosure
+      name={source.name}
+      lastModified={source.sourceLastModified}
+      href={source.datasetUrl}
+      linkLabel={linkLabel}
+      details={
+        <>
+          <p>Temporal coverage: {source.temporalCoverage}.</p>
+          <p>Retrieved {source.retrievedAt}.</p>
+          {joinMethod ? <p>Join: {joinMethod}.</p> : null}
+          <p className="break-all">Query: {source.queryUrl}</p>
+        </>
+      }
+    />
   );
 }
 
@@ -955,8 +1084,8 @@ function EvidenceGapsCard({
   const unimplemented = gaps.filter((gap) => gap.category === "unimplemented");
 
   return (
-    <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">Not Evaluated / further due diligence</h2>
+    <section id="result-gaps" className="bw-card mt-6 scroll-mt-24 p-5">
+      <h2 className="text-lg font-semibold">Not Evaluated / Further Due Diligence</h2>
       <p className="mt-1 text-sm text-ink-muted">
         These items are not scored. Missing evidence is not treated as favorable.
       </p>
@@ -966,7 +1095,7 @@ function EvidenceGapsCard({
           <ul className="mt-2 list-disc pl-5 text-sm">
             {core.map((gap) => (
               <li key={gap.label}>
-                {gap.label} — {gap.state.replaceAll("_", " ")}
+                {gap.label} — {gapStateLabel(gap.state)}
               </li>
             ))}
           </ul>
@@ -978,7 +1107,7 @@ function EvidenceGapsCard({
           <ul className="mt-2 list-disc pl-5 text-sm">
             {regulatory.map((gap) => (
               <li key={gap.label}>
-                {gap.label} — {gap.state.replaceAll("_", " ")}
+                {gap.label} — {gapStateLabel(gap.state)}
               </li>
             ))}
           </ul>
@@ -1019,8 +1148,9 @@ function CriticalFlagsCard({ decision }: { decision: DecisionSnapshot }) {
         <ul className="mt-3 space-y-4">
           {decision.flags.map((flag) => (
             <li key={flag.type} className="rounded-lg border border-line bg-paper p-4">
-              <p className="text-sm font-medium">
-                {flag.level}: {flag.title}
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                <StatusBadge tone="review">Review required</StatusBadge>
+                {flag.title}
               </p>
               <p className="mt-2 text-sm">
                 <span className="font-medium">Finding. </span>
@@ -1067,7 +1197,7 @@ function AiExplanation({
   if (aiSummary.status !== "ok") {
     return (
       <section className="bw-card mt-6 p-5">
-        <h2 className="text-lg font-semibold">AI Feasibility Summary</h2>
+        <h3 className="text-lg font-semibold">AI Feasibility Summary</h3>
         <p className="mt-2 text-sm leading-6">{aiSummary.message}</p>
       </section>
     );
@@ -1076,8 +1206,8 @@ function AiExplanation({
   const { narrative } = aiSummary;
 
   return (
-    <section className="bw-card mt-6 p-5">
-      <h2 className="text-lg font-semibold">AI Feasibility Summary</h2>
+      <section className="bw-card mt-6 p-5">
+      <h3 className="text-lg font-semibold">AI Feasibility Summary</h3>
       <p className="mt-2 text-sm leading-6">{narrative.summary}</p>
       <NarrativeList
         title="Key Bottlenecks"
@@ -1089,7 +1219,7 @@ function AiExplanation({
         items={narrative.constraint_interactions}
         empty="No interaction among evaluated constraints was described."
       />
-      <h3 className="mt-4 text-sm font-semibold">Why This Matters</h3>
+      <h4 className="mt-4 text-sm font-semibold">Why This Matters</h4>
       <p className="mt-2 text-sm">{narrative.why_this_matters}</p>
       <NarrativeList
         title="What Could Change the Result"
@@ -1101,7 +1231,7 @@ function AiExplanation({
         items={narrative.questions_for_human_review}
         empty="No review questions were listed."
       />
-      <h3 className="mt-4 text-sm font-semibold">Limitations</h3>
+      <h4 className="mt-4 text-sm font-semibold">Limitations</h4>
       <p className="mt-2 text-sm">{narrative.limitations}</p>
     </section>
   );
@@ -1118,7 +1248,7 @@ function NarrativeList({
 }) {
   return (
     <>
-      <h3 className="mt-4 text-sm font-semibold">{title}</h3>
+      <h4 className="mt-4 text-sm font-semibold">{title}</h4>
       {items.length === 0 ? (
         <p className="mt-2 text-sm">{empty}</p>
       ) : (
@@ -1136,7 +1266,7 @@ function SourcesAndAssumptions({ result }: { result: OkResult }) {
   const rows = buildSourceRows(result);
 
   return (
-    <section id="results-sources" className="bw-card mt-6 scroll-mt-24 p-5">
+    <section id="results-sources" className="bw-card mt-10 scroll-mt-24 p-5">
       <h2 className="text-lg font-semibold">Sources & Assumptions</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
@@ -1187,7 +1317,7 @@ function ParcelFactsDetail({
 }) {
   if (assessment.status !== "ok") {
     return (
-      <section className="bw-card mt-6 p-5" role="alert">
+      <section id="result-facts" className="bw-card mt-6 scroll-mt-24 p-5" role="alert">
         <h2 className="text-lg font-semibold">Property facts</h2>
         <p className="mt-2 text-sm">{assessment.message}</p>
         <p className="mt-2 text-sm text-ink-muted">
@@ -1209,7 +1339,7 @@ function ParcelFactsDetail({
     .join(" · ");
 
   return (
-    <section className="bw-card mt-6 p-5">
+    <section id="result-facts" className="bw-card mt-6 scroll-mt-24 p-5">
       <h2 className="text-lg font-semibold">Property facts</h2>
       <p className="mt-1 text-sm text-ink-muted">
         County assessed values are not market values.
@@ -1336,27 +1466,31 @@ function errorTitle(status: Exclude<AddressToParcelResult["status"], "ok">) {
 
 function ZoningSource({ source }: { source: ZoningSource }) {
   return (
-    <p className="mt-3 text-sm text-ink-muted">
-      Source: {source.name}. Dataset last modified:{" "}
-      {source.sourceLastModified ?? "not reported"}. Retrieved{" "}
-      {source.retrievedAt}.{" "}
-      <a href={source.datasetUrl} className="text-accent underline">
-        WPRDC zoning
-      </a>
-      {" · "}
-      <a href={source.zoningCodeUrl} className="text-accent underline">
-        Zoning Code
-      </a>
-      {" · "}
-      <a href={source.zoningMapUrl} className="text-accent underline">
-        City zoning map
-      </a>
-      {" · "}
-      <a href={source.cityZoningPageUrl} className="text-accent underline">
-        City zoning page
-      </a>
-      .
-    </p>
+    <SourceDisclosure
+      name={source.name}
+      lastModified={source.sourceLastModified}
+      href={source.datasetUrl}
+      linkLabel="WPRDC zoning"
+      details={
+        <>
+          <p>Retrieved {source.retrievedAt}.</p>
+          <p className="break-all">Query: {source.queryUrl}</p>
+          <p>
+            <a href={source.zoningCodeUrl} className="text-accent underline">
+              Zoning Code
+            </a>
+            {" · "}
+            <a href={source.zoningMapUrl} className="text-accent underline">
+              City zoning map
+            </a>
+            {" · "}
+            <a href={source.cityZoningPageUrl} className="text-accent underline">
+              City zoning page
+            </a>
+          </p>
+        </>
+      }
+    />
   );
 }
 
@@ -1372,24 +1506,26 @@ function HazardSourceLine({
   linkLabel: string;
 }) {
   return (
-    <p className="mt-2 text-sm text-ink-muted">
-      Source: {source.name}.{" "}
+    <div>
       {source.mapVintage ? (
-        <>
-          Map vintage: {source.mapVintage} (not current FEMA NFHL). Dataset last
-          modified: {source.sourceLastModified ?? "not reported"}.{" "}
-        </>
-      ) : (
-        <>
-          Dataset last modified: {source.sourceLastModified ?? "not reported"}.{" "}
-        </>
-      )}
-      Retrieved {source.retrievedAt}. CRS: {source.crs}.{" "}
-      <a href={source.datasetUrl} className="text-accent underline">
-        {linkLabel}
-      </a>
-      .
-    </p>
+        <p className="mt-2 text-sm text-ink-muted">
+          Map vintage: {source.mapVintage} (not current FEMA NFHL).
+        </p>
+      ) : null}
+      <SourceDisclosure
+        name={source.name}
+        lastModified={source.sourceLastModified}
+        href={source.datasetUrl}
+        linkLabel={linkLabel}
+        details={
+          <>
+            <p>Retrieved {source.retrievedAt}.</p>
+            <p>CRS: {source.crs}.</p>
+            <p className="break-all">Query: {source.queryUrl}</p>
+          </>
+        }
+      />
+    </div>
   );
 }
 
@@ -1433,10 +1569,10 @@ function SteepSlopeBlock({
   if (steepSlope.status === "not_evaluated") {
     return (
       <div className="mt-4 rounded-lg border border-line bg-paper p-4" role="alert">
-        <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           Steep slope
           <StatusBadge>Not Evaluated</StatusBadge>
-        </h3>
+        </h4>
         <p className="mt-2 text-sm">{steepSlope.message}</p>
         <p className="mt-2 text-sm text-ink-muted">
           Source failure is not treated as the absence of steep slope.
@@ -1447,10 +1583,10 @@ function SteepSlopeBlock({
 
   return (
     <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-      <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+      <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
         Steep slope
-        <StatusBadge tone="accent">Evaluated</StatusBadge>
-      </h3>
+        <StatusBadge>Evaluated</StatusBadge>
+      </h4>
       <p className="mt-2 text-sm">{steepSlope.message}</p>
       <HazardOverlap
         overlapPercent={steepSlope.overlapPercent}
@@ -1474,10 +1610,10 @@ function LandslideBlock({
   if (landslide.status === "not_evaluated") {
     return (
       <div className="mt-4 rounded-lg border border-line bg-paper p-4" role="alert">
-        <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           Landslide
           <StatusBadge>Not Evaluated</StatusBadge>
-        </h3>
+        </h4>
         <p className="mt-2 text-sm">{landslide.message}</p>
         <p className="mt-2 text-sm text-ink-muted">
           Source failure is not treated as the absence of landslide-prone area.
@@ -1488,10 +1624,10 @@ function LandslideBlock({
 
   return (
     <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-      <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+      <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
         Landslide
-        <StatusBadge tone="accent">Evaluated</StatusBadge>
-      </h3>
+        <StatusBadge>Evaluated</StatusBadge>
+      </h4>
       <p className="mt-2 text-sm">{landslide.message}</p>
       <HazardOverlap
         overlapPercent={landslide.overlapPercent}
@@ -1515,10 +1651,10 @@ function UnderminedBlock({
   if (undermined.status === "not_evaluated") {
     return (
       <div className="mt-4 rounded-lg border border-line bg-paper p-4" role="alert">
-        <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           Mine / undermined
           <StatusBadge>Not Evaluated</StatusBadge>
-        </h3>
+        </h4>
         <p className="mt-2 text-sm">{undermined.message}</p>
         <p className="mt-2 text-sm text-ink-muted">
           Source failure is not treated as the absence of undermined/mine
@@ -1530,10 +1666,10 @@ function UnderminedBlock({
 
   return (
     <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-      <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+      <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
         Mine / undermined
-        <StatusBadge tone="accent">Evaluated</StatusBadge>
-      </h3>
+        <StatusBadge>Evaluated</StatusBadge>
+      </h4>
       <p className="mt-2 text-sm">{undermined.message}</p>
       {undermined.classifications.length > 0 ? (
         <p className="mt-2 text-sm">
@@ -1558,10 +1694,10 @@ function FloodBlock({ flood }: { flood: FloodLookupResult }) {
   if (flood.status === "not_evaluated") {
     return (
       <div className="mt-2 rounded-lg border border-line bg-paper p-4" role="alert">
-        <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           Flood hazard
           <StatusBadge>Not Evaluated</StatusBadge>
-        </h3>
+        </h4>
         <p className="mt-2 text-sm">{flood.message}</p>
         <p className="mt-2 text-sm text-ink-muted">
           Source failure is not treated as the absence of flood hazard. This is
@@ -1573,12 +1709,12 @@ function FloodBlock({ flood }: { flood: FloodLookupResult }) {
 
   return (
     <div className="mt-2 rounded-lg border border-line bg-paper p-4">
-      <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+      <h4 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
         {flood.provenance === "wprdc_2014_extract"
           ? "Flood hazard (2014 WPRDC FEMA extract)"
           : "Flood hazard"}
-        <StatusBadge tone="accent">Evaluated</StatusBadge>
-      </h3>
+        <StatusBadge>Evaluated</StatusBadge>
+      </h4>
       <p className="mt-2 text-sm">{flood.message}</p>
       {flood.zones.length > 0 ? (
         <ul className="mt-2 list-disc pl-5 text-sm">

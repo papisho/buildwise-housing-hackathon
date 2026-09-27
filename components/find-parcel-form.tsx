@@ -56,7 +56,7 @@ export function FindParcelForm() {
   }, [pending, result]);
 
   return (
-    <section id="analyze" className="mt-12 scroll-mt-24">
+    <section id="analyze" className="mt-10 scroll-mt-24">
       <div className="bw-card p-5 sm:p-6">
         <h2 className="text-xl font-semibold tracking-tight">Analyze a property</h2>
         <p className="mt-1 text-sm text-ink-muted">
@@ -119,6 +119,9 @@ export function FindParcelForm() {
           >
             {pending ? "Analyzing…" : "Analyze Property"}
           </button>
+          <p className="text-xs leading-5 text-ink-muted lg:col-span-3">
+            Enter a full Pittsburgh address for the most reliable parcel match.
+          </p>
         </form>
       </div>
 

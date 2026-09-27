@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AskBuildWiseAI } from "@/components/ask-buildwise-ai";
+import { SourceDisclosure } from "@/components/result-chrome";
 import { StatusBadge } from "@/components/status-badge";
 import { withFinancialScenario } from "@/lib/claude/payload";
 import type { ClaudeAnalysisInput } from "@/lib/claude/types";
@@ -13,6 +14,7 @@ import { tryCalculateDevelopmentScenario } from "@/lib/financial/scenario";
 import type { FinancialContextResult } from "@/lib/financial";
 import type {
   DevelopmentScenarioResult,
+  FinancialSource,
   FinancialValueProvenance,
 } from "@/lib/financial/types";
 
@@ -42,15 +44,13 @@ function ProvenanceBadge({
 }) {
   const label =
     value === "USER_ASSUMPTION"
-      ? "Assumption"
+      ? "User Assumption"
       : value === "CALCULATED_FROM_USER_ASSUMPTIONS"
         ? "Calculated"
-        : "Public data";
+        : "Public Data";
   return (
     <span title={value} data-provenance={value} className="align-middle">
-      <StatusBadge tone={value === "PUBLIC_DATA" ? "accent" : "neutral"}>
-        {label}
-      </StatusBadge>
+      <StatusBadge>{label}</StatusBadge>
     </span>
   );
 }
@@ -93,21 +93,16 @@ export function PreliminaryFinancialContext({
     financial.hud.status === "ok" ? financial.hud.rents.twoBedroom : null;
 
   return (
-    <section className="bw-card mt-6 p-5">
+    <section id="result-financial" className="bw-card mt-10 scroll-mt-24 p-5">
       <h2 className="text-lg font-semibold">Preliminary Financial Context</h2>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         {FINANCIAL_CONTEXT_LABELS[overallStatus]}{" "}
-        <StatusBadge
-          tone={
-            overallStatus === "FINANCIAL_CONTEXT_NOT_EVALUATED"
-              ? "neutral"
-              : overallStatus === "FINANCIAL_CONTEXT_PARTIAL"
-                ? "review"
-                : "accent"
-          }
-        >
-          {overallStatus.replaceAll("_", " ")}
-        </StatusBadge>
+        {overallStatus === "FINANCIAL_CONTEXT_NOT_EVALUATED" ? (
+          <StatusBadge>Not Evaluated</StatusBadge>
+        ) : null}
+        {overallStatus === "FINANCIAL_CONTEXT_PARTIAL" ? (
+          <StatusBadge tone="review">Review required</StatusBadge>
+        ) : null}
       </p>
       <p className="mt-2 text-sm">
         This is not a full pro forma and not a financial-feasibility
@@ -122,13 +117,24 @@ export function PreliminaryFinancialContext({
         broker opinion.
       </p>
       {financial.sales.status !== "ok" ? (
-        <p className="mt-2 text-sm">Not Evaluated. {financial.sales.message}</p>
+        <>
+          <p className="mt-2 text-sm">
+            Not Evaluated. {financial.sales.message}
+          </p>
+          <FinancialSourceLine source={financial.sales.source} linkLabel="View source" />
+        </>
       ) : financial.sales.records.length === 0 ? (
-        <p className="mt-2 text-sm">
-          No County-coded VALID SALE (SALECODE 0) records were identified
-          within the {financial.sales.searchRadiusFeet.toLocaleString()} ft
-          search among {financial.sales.neighborParcelCount} nearby parcels.
-        </p>
+        <>
+          <p className="mt-2 text-sm">
+            No County-coded VALID SALE (SALECODE 0) records were identified
+            within the {financial.sales.searchRadiusFeet.toLocaleString()} ft
+            search among {financial.sales.neighborParcelCount} nearby parcels.
+          </p>
+          <FinancialSourceLine
+            source={financial.sales.source}
+            linkLabel="View source"
+          />
+        </>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[40rem] text-left text-sm">
@@ -164,9 +170,13 @@ export function PreliminaryFinancialContext({
           </table>
           <p className="mt-2 text-xs text-ink-muted">
             Filter: {financial.sales.validatedFilter}. Radius used:{" "}
-            {financial.sales.searchRadiusFeet.toLocaleString()} ft. Values tagged
-            PUBLIC_DATA.
+            {financial.sales.searchRadiusFeet.toLocaleString()} ft.{" "}
+            <ProvenanceBadge value="PUBLIC_DATA" />
           </p>
+          <FinancialSourceLine
+            source={financial.sales.source}
+            linkLabel="View source"
+          />
         </div>
       )}
 
@@ -176,7 +186,10 @@ export function PreliminaryFinancialContext({
         rents or guaranteed achievable project rents. They are not market rent.
       </p>
       {financial.hud.status !== "ok" ? (
-        <p className="mt-2 text-sm">Not Evaluated. {financial.hud.message}</p>
+        <>
+          <p className="mt-2 text-sm">Not Evaluated. {financial.hud.message}</p>
+          <FinancialSourceLine source={financial.hud.source} linkLabel="View source" />
+        </>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[28rem] text-left text-sm">
@@ -204,16 +217,14 @@ export function PreliminaryFinancialContext({
             {financial.hud.geographyType === "ZIP_SAFMR"
               ? `ZIP ${financial.hud.zip} Small Area FMR (SAFMR)`
               : "Metro-area FMR (ZIP SAFMR row was not available)"}
-            {financial.hud.areaName ? ` · ${financial.hud.areaName}` : ""} ·
-            entity {financial.hud.entityId}. PUBLIC_DATA.
+            {financial.hud.areaName ? ` · ${financial.hud.areaName}` : ""}{" "}
+            <ProvenanceBadge value="PUBLIC_DATA" />
           </p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Source: {financial.hud.source.name}.{" "}
-            <a className="underline" href={financial.hud.source.queryUrl}>
-              HUD User FMR API
-            </a>
-            . Retrieved {financial.hud.source.retrievedAt}.
-          </p>
+          <FinancialSourceLine
+            source={financial.hud.source}
+            linkLabel="View source"
+            extra={`Entity ${financial.hud.entityId}.`}
+          />
         </div>
       )}
 
@@ -434,14 +445,42 @@ export function PreliminaryFinancialContext({
   );
 }
 
+function FinancialSourceLine({
+  source,
+  linkLabel,
+  extra,
+}: {
+  source: FinancialSource;
+  linkLabel: string;
+  extra?: string;
+}) {
+  return (
+    <SourceDisclosure
+      name={source.name}
+      lastModified={source.sourceLastModified}
+      href={source.datasetUrl}
+      linkLabel={linkLabel}
+      details={
+        <>
+          <p>Retrieved {source.retrievedAt}.</p>
+          {extra ? <p>{extra}</p> : null}
+          <p className="break-all">Query: {source.queryUrl}</p>
+        </>
+      }
+    />
+  );
+}
+
 export function FinancialContextWithChat({
   financial,
   claudeContext,
   sessionKey,
+  interpretation,
 }: {
   financial: FinancialContextResult;
   claudeContext: ClaudeAnalysisInput;
   sessionKey: string;
+  interpretation: ReactNode;
 }) {
   const [scenario, setScenario] = useState<DevelopmentScenarioResult | null>(
     null,
@@ -453,7 +492,23 @@ export function FinancialContextWithChat({
         financial={financial}
         onScenarioChange={setScenario}
       />
-      <AskBuildWiseAI key={sessionKey} context={context} sessionKey={sessionKey} />
+      <div id="result-ai" className="scroll-mt-24">
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold tracking-tight">
+            AI interpretation
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">
+            Grounded in the structured evidence above. AI does not calculate the
+            score or override source records.
+          </p>
+        </div>
+        {interpretation}
+        <AskBuildWiseAI
+          key={sessionKey}
+          context={context}
+          sessionKey={sessionKey}
+        />
+      </div>
     </>
   );
 }

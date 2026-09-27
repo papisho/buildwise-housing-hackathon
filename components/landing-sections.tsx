@@ -8,9 +8,9 @@ export function HeroSection() {
         Know the barriers before you build.
       </h1>
       <p className="mt-4 max-w-2xl text-base leading-7 text-ink-muted sm:text-lg">
-        A preliminary development-feasibility navigator for Pittsburgh housing
-        sites. BuildWise combines parcel, zoning, mapped site constraints, and
-        grounded AI interpretation to support faster first-pass due diligence.
+        Preliminary development screening for Pittsburgh housing sites —
+        combining parcel, zoning, mapped constraints, regulatory records,
+        market context, and grounded AI.
       </p>
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <a href="#analyze" className="bw-btn px-5 py-3 text-base">

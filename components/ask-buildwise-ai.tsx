@@ -75,12 +75,12 @@ export function AskBuildWiseAI({
   }
 
   return (
-    <section className="mt-6 overflow-hidden rounded-xl border border-accent/20 bg-accent-soft/40 shadow-sm">
-      <div className="border-b border-accent/15 bg-surface px-5 py-4">
-        <h2 className="text-lg font-semibold">Ask BuildWise AI</h2>
+    <section className="bw-card mt-6 overflow-hidden">
+      <div className="border-b border-line bg-paper px-5 py-4">
+        <h3 className="text-lg font-semibold">Ask BuildWise AI</h3>
         <p className="mt-1 text-sm text-ink-muted">
-          Ask about this parcel, its constraints, missing evidence, or next
-          steps.
+          Questions stay grounded in this parcel&apos;s structured evidence.
+          Answers do not recalculate the score or replace source records.
         </p>
       </div>
 

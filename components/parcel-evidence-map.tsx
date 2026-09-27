@@ -81,7 +81,7 @@ function LegendRow({
         <span className="min-w-0">
           <span className="text-ink-muted">{layer.name}</span>{" "}
           {layer.state === "not_evaluated" ? (
-            <StatusBadge tone="review">Not Evaluated</StatusBadge>
+            <StatusBadge>Not Evaluated</StatusBadge>
           ) : (
             <StatusBadge>No mapped intersection</StatusBadge>
           )}
@@ -140,7 +140,7 @@ export function ParcelEvidenceMap({ data }: { data: EvidenceMapData | null }) {
 
   return (
     <section className="bw-card mt-6 p-5">
-      <h3 className="text-lg font-semibold">Parcel &amp; Evidence Map</h3>
+      <h2 className="text-lg font-semibold">Parcel &amp; Evidence Map</h2>
       <p className="mt-1 text-sm text-ink-muted">{SCREENING_NOTE}</p>
 
       {data === null ? (
@@ -164,7 +164,7 @@ export function ParcelEvidenceMap({ data }: { data: EvidenceMapData | null }) {
             </div>
             <div className="min-w-0">
               <div className="flex items-baseline justify-between gap-2">
-                <h4 className="text-sm font-semibold">Layers</h4>
+                <h3 className="text-sm font-semibold">Layers</h3>
                 <button
                   type="button"
                   onClick={() => setResetCount((count) => count + 1)}
