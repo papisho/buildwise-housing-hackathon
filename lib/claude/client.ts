@@ -100,7 +100,8 @@ export async function explainAnalysis(
       },
       body: JSON.stringify({
         model: readClaudeModel(),
-        max_tokens: 1200,
+        max_tokens: 2000,
+        thinking: { type: "disabled" },
         system: CLAUDE_SYSTEM_PROMPT,
         messages: [
           {
