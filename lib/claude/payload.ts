@@ -5,6 +5,7 @@ import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import { proposedProjectTypeLabel } from "@/lib/project-type";
 import type { ProposedProjectType } from "@/lib/project-type";
+import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
@@ -49,6 +50,7 @@ export function buildClaudeAnalysisInput(input: {
   decision: DecisionSnapshot;
   recommendedVerification: string[];
   regulatoryRecords: RegulatoryRecordsResult;
+  historicDesignation: HistoricDesignationResult;
 }): ClaudeAnalysisInput {
   const facts =
     input.assessment.status === "ok" ? input.assessment.facts : null;
@@ -102,6 +104,9 @@ export function buildClaudeAnalysisInput(input: {
       },
     },
     regulatory_records: compactRegulatoryRecords(input.regulatoryRecords),
+    historic_designation: compactHistoricDesignation(
+      input.historicDesignation,
+    ),
     overall_screening_status: input.decision.screeningStatus,
     score: {
       development_ease: input.decision.score.value,
@@ -192,6 +197,42 @@ function compactRegulatoryRecords(
   };
 }
 
+function compactHistoricDesignation(
+  historic: HistoricDesignationResult,
+): ClaudeAnalysisInput["historic_designation"] {
+  return {
+    overall_status: historic.overallStatus,
+    overall_status_label: historic.overallStatusLabel,
+    parcel_id: historic.parcelId,
+    partial_evidence: historic.partialEvidence,
+    unevaluated_layers: historic.unevaluatedLayers,
+    districts_source_status:
+      historic.districts.status === "ok" ? "EVALUATED" : "NOT_EVALUATED",
+    sites_source_status:
+      historic.sites.status === "ok" ? "EVALUATED" : "NOT_EVALUATED",
+    district_intersects:
+      historic.districts.status === "ok" ? historic.districts.intersects : null,
+    district_names:
+      historic.districts.status === "ok"
+        ? historic.districts.districts.map((district) => district.name)
+        : [],
+    district_overlap_pct:
+      historic.districts.status === "ok"
+        ? historic.districts.overlapPercent
+        : null,
+    site_intersects:
+      historic.sites.status === "ok" ? historic.sites.intersects : null,
+    site_names:
+      historic.sites.status === "ok"
+        ? historic.sites.sites.map((site) => site.name)
+        : [],
+    site_overlap_pct:
+      historic.sites.status === "ok" ? historic.sites.overlapPercent : null,
+    message: historic.message,
+    limitations: historic.limitations,
+  };
+}
+
 export const CLAUDE_SYSTEM_PROMPT = `You are an interpretive explanation layer for BuildWise, a preliminary Pittsburgh housing-site screening tool.
 
 This is decision support only. It is not legal, zoning, engineering, environmental, or financial advice.
@@ -203,17 +244,18 @@ Your job is to interpret what the supplied evidence means for the proposed housi
 Grounding rule (applies to every field, including summary, why_this_matters, limitations, what_could_change_the_result, and questions_for_human_review):
 Do not introduce hypothetical constraints, overlays, regulations, hazards, infrastructure issues, ownership issues, financial issues, or missing evidence unless they are explicitly present in the structured payload as evaluated findings or Not Evaluated items. If the payload does not mention a factor, do not raise it as a potential issue or due-diligence item.
 
-Stay inside the payload keys and values only: analysis_type, property, proposed_project, zoning, site_conditions, environment, regulatory_records, overall_screening_status, score, critical_flags, not_evaluated, recommended_verification. If a sentence would require a factor that is not one of those keys or their values, omit the sentence. Exception: limitations may include the required core-hazard-coverage caveat below, which names site-design, infrastructure, environmental, and regulatory assessment only to say they are not complete.
+Stay inside the payload keys and values only: analysis_type, property, proposed_project, zoning, site_conditions, environment, regulatory_records, historic_designation, overall_screening_status, score, critical_flags, not_evaluated, recommended_verification. If a sentence would require a factor that is not one of those keys or their values, omit the sentence. Exception: limitations may include the required core-hazard-coverage caveat below, which names site-design, infrastructure, environmental, and regulatory assessment only to say they are not complete.
 
 Reasoning you SHOULD do, using only the payload:
 - Identify which evaluated constraints matter most for this proposed housing type, and rank them as bottlenecks. A bottleneck must cite an evaluated field (use_status, a Critical Flag, a hazard with intersects/overlap, or regulatory_records with clearly unresolved review_class).
 - Explain why those evaluated constraints matter for screening. When evaluated mapped hazard layers show no intersection, why_this_matters must include this exact sentence and no other hazard-scope wording: "No barriers were identified in the currently evaluated mapped hazard layers." Do not mention site-design barriers, environmental-review barriers, physical barriers, or that barriers are not immediately apparent. The remaining sentences may discuss use_status, Critical Flags, and regulatory_records only.
 - You may summarize permit/violation history from regulatory_records, explain why unresolved records matter for screening, and suggest verification questions already aligned with recommended_verification.
+- You may summarize historic_designation evidence (district/site names, overlap, overall_status, partial_evidence). Historic designation can create additional review/design constraints. You must not claim historic approval is required unless overall_status is HISTORIC_DISTRICT_REVIEW, INDIVIDUAL_HISTORIC_DESIGNATION_REVIEW, or MULTIPLE_HISTORIC_REVIEW. Even then, say review may apply; do not claim demolition is prohibited, exterior work is prohibited, or the project is infeasible. Do not invent preservation rules. Treat districts_source_status or sites_source_status of NOT_EVALUATED as Not Evaluated, never as no designation. If partial_evidence is true, say the historic screening is incomplete.
 - You must not infer legal status, claim a permit guarantees entitlement, claim a closed or completed record means all regulatory issues are resolved, or invent violations or conditions. No record in the queried dataset is not proof that no regulatory issue exists. Do not treat permits_source_status or violations_source_status of NOT_EVALUATED as clear or favorable.
 - Explain interactions when more than one evaluated constraint is present (for example: a use-table mismatch can be the primary entitlement barrier while a modest steep-slope overlap is a separate constructability/cost uncertainty — without calling the site impossible).
 - Distinguish evaluated facts from items listed in not_evaluated. If an interpretation would require evidence that is not in the payload, omit that interpretation.
 - what_could_change_the_result may only restate items already in not_evaluated or recommended_verification, or ask for professional confirmation of an already-evaluated constraint already present in site_conditions or environment. If not_evaluated is empty, include at most one item.
-- questions_for_human_review may only ask about use_status, mapped_codes, Critical Flags, evaluated hazards, not_evaluated, or recommended_verification. If not_evaluated is empty, include at most one question, about use_status or recommended_verification. Do not ask about property_class or property_use.
+- questions_for_human_review may only ask about use_status, mapped_codes, Critical Flags, evaluated hazards, historic_designation, not_evaluated, or recommended_verification. If not_evaluated is empty, include at most one question, about use_status or recommended_verification. Do not ask about property_class or property_use.
 
 You MUST NOT:
 - Guess compatibility for districts marked NOT_IDENTIFIED. The bottleneck is that the encoded rule set did not identify the district; recommend interpretation, do not fill in a use path.
@@ -253,8 +295,9 @@ You MAY:
 - compare evaluated constraints;
 - explain why an evaluated finding matters;
 - summarize regulatory_records history and why unresolved records matter;
+- summarize historic_designation evidence and why identified district/site intersection matters for review/design risk;
 - suggest verification questions already present in recommended_verification;
-- prioritize already-known concerns (flags, use_status, hazards, unresolved regulatory records);
+- prioritize already-known concerns (flags, use_status, hazards, unresolved regulatory records, historic_designation);
 - turn payload evidence into a checklist;
 - generate questions for human review about payload fields;
 - explain what additional evidence could change the screening result only when that missing evidence is explicitly listed in not_evaluated or recommended_verification.
@@ -265,6 +308,9 @@ You MUST NOT:
 - claim a permit guarantees entitlement;
 - claim a closed or completed record means all regulatory issues are resolved;
 - invent violations, conditions, or approvals;
+- claim historic approval is required unless historic_designation.overall_status is HISTORIC_DISTRICT_REVIEW, INDIVIDUAL_HISTORIC_DESIGNATION_REVIEW, or MULTIPLE_HISTORIC_REVIEW, and even then only that review may apply;
+- claim demolition is prohibited, exterior work is prohibited, or the project is infeasible because of historic designation;
+- invent preservation ordinance rules;
 - introduce missing evidence not named in the payload;
 - alter score, coverage, flags, or zoning status;
 - claim legal approval, entitlement, engineering safety, environmental clearance, or financial feasibility;

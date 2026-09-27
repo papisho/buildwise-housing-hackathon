@@ -228,6 +228,80 @@ function parseRegulatoryRecords(
   };
 }
 
+function parseHistoricDesignation(
+  value: unknown,
+): ClaudeAnalysisInput["historic_designation"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const overallStatus = asString(value.overall_status);
+  const overallLabel = asString(value.overall_status_label);
+  const parcelId = asString(value.parcel_id);
+  const message = asString(value.message);
+  const districtNames = asStringArray(value.district_names);
+  const siteNames = asStringArray(value.site_names);
+  const limitations = asStringArray(value.limitations);
+  const unevaluatedLayers = asStringArray(value.unevaluated_layers);
+  const districtOverlap = asNumberOrNull(value.district_overlap_pct);
+  const siteOverlap = asNumberOrNull(value.site_overlap_pct);
+  if (
+    !overallStatus ||
+    !overallLabel ||
+    !parcelId ||
+    !message ||
+    !districtNames ||
+    !siteNames ||
+    !limitations ||
+    !unevaluatedLayers ||
+    typeof value.partial_evidence !== "boolean" ||
+    districtOverlap === undefined ||
+    siteOverlap === undefined
+  ) {
+    return null;
+  }
+  if (
+    value.districts_source_status !== "EVALUATED" &&
+    value.districts_source_status !== "NOT_EVALUATED"
+  ) {
+    return null;
+  }
+  if (
+    value.sites_source_status !== "EVALUATED" &&
+    value.sites_source_status !== "NOT_EVALUATED"
+  ) {
+    return null;
+  }
+  if (
+    value.district_intersects !== null &&
+    typeof value.district_intersects !== "boolean"
+  ) {
+    return null;
+  }
+  if (
+    value.site_intersects !== null &&
+    typeof value.site_intersects !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    overall_status: overallStatus,
+    overall_status_label: overallLabel,
+    parcel_id: parcelId,
+    partial_evidence: value.partial_evidence,
+    unevaluated_layers: unevaluatedLayers,
+    districts_source_status: value.districts_source_status,
+    sites_source_status: value.sites_source_status,
+    district_intersects: value.district_intersects,
+    district_names: districtNames,
+    district_overlap_pct: districtOverlap,
+    site_intersects: value.site_intersects,
+    site_names: siteNames,
+    site_overlap_pct: siteOverlap,
+    message,
+    limitations,
+  };
+}
+
 function parseFactorContributions(
   value: unknown,
 ): ClaudeAnalysisInput["score"]["factor_contributions"] | null {
@@ -442,7 +516,15 @@ export function parseClaudeAnalysisInput(
   const notEvaluated = asStringArray(value.not_evaluated);
   const recommended = asStringArray(value.recommended_verification);
   const regulatoryRecords = parseRegulatoryRecords(value.regulatory_records);
-  if (!notEvaluated || !recommended || !regulatoryRecords) {
+  const historicDesignation = parseHistoricDesignation(
+    value.historic_designation,
+  );
+  if (
+    !notEvaluated ||
+    !recommended ||
+    !regulatoryRecords ||
+    !historicDesignation
+  ) {
     return null;
   }
 
@@ -475,6 +557,7 @@ export function parseClaudeAnalysisInput(
       flood: { ...floodBase, provenance: floodProvenance },
     },
     regulatory_records: regulatoryRecords,
+    historic_designation: historicDesignation,
     overall_screening_status: screeningStatus,
     score: {
       development_ease: developmentEase,

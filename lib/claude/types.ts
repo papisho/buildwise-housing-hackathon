@@ -71,6 +71,23 @@ export type ClaudeAnalysisInput = {
     }>;
     limitations: string[];
   };
+  historic_designation: {
+    overall_status: string;
+    overall_status_label: string;
+    parcel_id: string;
+    partial_evidence: boolean;
+    unevaluated_layers: string[];
+    districts_source_status: "EVALUATED" | "NOT_EVALUATED";
+    sites_source_status: "EVALUATED" | "NOT_EVALUATED";
+    district_intersects: boolean | null;
+    district_names: string[];
+    district_overlap_pct: number | null;
+    site_intersects: boolean | null;
+    site_names: string[];
+    site_overlap_pct: number | null;
+    message: string;
+    limitations: string[];
+  };
   overall_screening_status: string;
   score: {
     development_ease: number | null;

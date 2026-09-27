@@ -10,6 +10,7 @@ import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 import { proposedProjectTypeLabel } from "@/lib/project-type";
+import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import { streetLineKey } from "@/lib/regulatory/address";
 import { COVERAGE_THRESHOLDS } from "@/lib/scoring/config";
@@ -102,6 +103,7 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         undermined={result.undermined}
       />
       <EnvironmentalConditions flood={result.flood} />
+      <HistoricDesignReview historicDesignation={result.historicDesignation} />
       <RegulatoryContext regulatoryRecords={result.regulatoryRecords} />
       <CriticalFlagsCard decision={result.decision} />
       <EvidenceGapsCard gaps={result.decision.evidenceGaps} />
@@ -467,6 +469,153 @@ function EnvironmentalConditions({ flood }: { flood: FloodLookupResult }) {
   );
 }
 
+function HistoricDesignReview({
+  historicDesignation,
+}: {
+  historicDesignation: HistoricDesignationResult;
+}) {
+  const tone = historicDesignation.partialEvidence
+    ? "review"
+    : historicDesignation.overallStatus === "HISTORIC_STATUS_NOT_EVALUATED"
+      ? "neutral"
+      : historicDesignation.overallStatus ===
+          "NO_HISTORIC_DESIGNATION_IDENTIFIED"
+        ? "accent"
+        : "review";
+  const districtNames =
+    historicDesignation.districts.status === "ok"
+      ? historicDesignation.districts.districts.map((district) => district.name)
+      : [];
+  const siteNames =
+    historicDesignation.sites.status === "ok"
+      ? historicDesignation.sites.sites.map((site) => site.name)
+      : [];
+  const districtOverlap =
+    historicDesignation.districts.status === "ok"
+      ? historicDesignation.districts.overlapPercent
+      : null;
+  const siteOverlap =
+    historicDesignation.sites.status === "ok"
+      ? historicDesignation.sites.overlapPercent
+      : null;
+  const reviewFlags = [
+    historicDesignation.districts.status === "ok" &&
+    historicDesignation.districts.intersects
+      ? "HISTORIC_DISTRICT_REVIEW"
+      : null,
+    historicDesignation.sites.status === "ok" &&
+    historicDesignation.sites.intersects
+      ? "HISTORIC_SITE_REVIEW"
+      : null,
+  ].filter((flag): flag is string => Boolean(flag));
+
+  return (
+    <section className="bw-card mt-6 p-5">
+      <h2 className="text-lg font-semibold">Historic / Design Review</h2>
+      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        {historicDesignation.overallStatusLabel}{" "}
+        <StatusBadge tone={tone}>
+          {historicDesignation.overallStatus.replaceAll("_", " ")}
+        </StatusBadge>
+        {historicDesignation.partialEvidence ? (
+          <StatusBadge tone="neutral">Partial / Not Evaluated</StatusBadge>
+        ) : null}
+      </p>
+      {historicDesignation.partialEvidence ? (
+        <p className="mt-2 text-sm">
+          Partial historic evidence.{" "}
+          {historicDesignation.unevaluatedLayers.join(" and ")}{" "}
+          {historicDesignation.unevaluatedLayers.length === 1 ? "was" : "were"}{" "}
+          Not Evaluated. The review flag below is based only on the successful
+          historic sublayer. This card is not a complete historic screening.
+        </p>
+      ) : null}
+      <p className="mt-2 text-sm">{historicDesignation.message}</p>
+      <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-ink-muted">Historic district</dt>
+          <dd>
+            {historicDesignation.districts.status !== "ok"
+              ? "Not Evaluated"
+              : historicDesignation.districts.intersects
+                ? districtNames.join("; ") || "Intersection identified"
+                : "No intersection identified"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">District overlap</dt>
+          <dd>
+            {historicDesignation.districts.status !== "ok"
+              ? "Not Evaluated"
+              : districtOverlap === null
+                ? "Not calculated"
+                : `${districtOverlap.toFixed(1)}%`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Individual designation</dt>
+          <dd>
+            {historicDesignation.sites.status !== "ok"
+              ? "Not Evaluated"
+              : historicDesignation.sites.intersects
+                ? siteNames.join("; ") || "Intersection identified"
+                : "No intersection identified"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Site overlap</dt>
+          <dd>
+            {historicDesignation.sites.status !== "ok"
+              ? "Not Evaluated"
+              : siteOverlap === null
+                ? "Not calculated"
+                : `${siteOverlap.toFixed(1)}%`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Review flags</dt>
+          <dd>{reviewFlags.length > 0 ? reviewFlags.join(", ") : "None"}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Canonical PIN</dt>
+          <dd>{historicDesignation.parcelId}</dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-sm text-ink-muted">
+        District source:{" "}
+        <a
+          className="text-accent underline"
+          href={historicDesignation.districts.source.datasetUrl}
+        >
+          {historicDesignation.districts.source.name}
+        </a>
+        . Last modified:{" "}
+        {historicDesignation.districts.source.sourceLastModified ??
+          "not reported"}
+        . Retrieved {historicDesignation.districts.source.retrievedAt}.
+      </p>
+      <p className="mt-1 text-sm text-ink-muted">
+        Site source:{" "}
+        <a
+          className="text-accent underline"
+          href={historicDesignation.sites.source.datasetUrl}
+        >
+          {historicDesignation.sites.source.name}
+        </a>
+        . Last modified:{" "}
+        {historicDesignation.sites.source.sourceLastModified ?? "not reported"}
+        . Retrieved {historicDesignation.sites.source.retrievedAt}.
+      </p>
+      <p className="mt-3 text-sm font-medium">Limitations</p>
+      <ul className="mt-1 list-disc pl-5 text-sm text-ink-muted">
+        {historicDesignation.limitations.map((limitation) => (
+          <li key={limitation}>{limitation}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function RegulatoryContext({
   regulatoryRecords,
 }: {
@@ -502,15 +651,7 @@ function RegulatoryContext({
   return (
     <section className="bw-card mt-6 p-5">
       <h2 className="text-lg font-semibold">Regulatory Context</h2>
-      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-        Historic designation — Not Evaluated.{" "}
-        <StatusBadge>Not Evaluated</StatusBadge>
-      </p>
-      <p className="mt-2 text-sm">
-        This MVP does not yet load City historic district or landmark layers.
-      </p>
-
-      <div className="mt-5 border-t border-line pt-4">
+      <div className="mt-5">
         <h3 className="text-base font-semibold">Regulatory Records</h3>
         <p className="mt-1 text-sm text-ink-muted">
           Separate from Core Evidence Coverage. Missing data is Not Evaluated,
@@ -1611,6 +1752,38 @@ function buildSourceRows(result: OkResult) {
   rows.push(hazardSourceRow("landslide", "Landslide", result.landslide));
   rows.push(hazardSourceRow("mine", "Mine / undermined", result.undermined));
   rows.push(hazardSourceRow("flood", "Flood", result.flood));
+  rows.push({
+    key: "historic-districts",
+    source: result.historicDesignation.districts.source.name,
+    href: result.historicDesignation.districts.source.datasetUrl,
+    finding:
+      result.historicDesignation.districts.status === "ok"
+        ? result.historicDesignation.districts.intersects
+          ? result.historicDesignation.districts.districts
+              .map((district) => district.name)
+              .join("; ")
+          : "No mapped City historic district intersection"
+        : "Not Evaluated",
+    method: `Full parcel polygon intersection using canonical PIN ${result.historicDesignation.parcelId}`,
+    vintage: `${result.historicDesignation.districts.source.sourceLastModified ?? "not reported"} · retrieved ${result.historicDesignation.districts.source.retrievedAt}`,
+    limitation:
+      "GIS screening only. Not a Historic Review Commission determination. Overlaps under 1% are ignored as a BuildWise geometry-noise heuristic unless lotblock matches the canonical PIN; 1% is not an official City threshold.",
+  });
+  rows.push({
+    key: "historic-sites",
+    source: result.historicDesignation.sites.source.name,
+    href: result.historicDesignation.sites.source.datasetUrl,
+    finding:
+      result.historicDesignation.sites.status === "ok"
+        ? result.historicDesignation.sites.intersects
+          ? result.historicDesignation.sites.sites.map((site) => site.name).join("; ")
+          : "No mapped individually designated historic site intersection"
+        : "Not Evaluated",
+    method: `Full parcel polygon intersection using canonical PIN ${result.historicDesignation.parcelId}`,
+    vintage: `${result.historicDesignation.sites.source.sourceLastModified ?? "not reported"} · retrieved ${result.historicDesignation.sites.source.retrievedAt}`,
+    limitation:
+      "Designated-site polygons may not match County parcel boundaries exactly. Overlaps under 1% are ignored as a BuildWise geometry-noise heuristic unless lotblock matches the canonical PIN.",
+  });
   rows.push(regulatorySourceRow("permits", result.regulatoryRecords.permits));
   rows.push(
     regulatorySourceRow("violations", result.regulatoryRecords.violations),

@@ -3,6 +3,7 @@ import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
+import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
 import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
@@ -33,7 +34,7 @@ import {
 export type EvidenceGap = {
   label: string;
   state: "NOT_EVALUATED" | "REQUIRES_FURTHER_DUE_DILIGENCE";
-  category: "core_source" | "unimplemented" | "regulatory_source";
+  category: "core_source" | "unimplemented" | "regulatory_source" | "historic_source";
 };
 
 export type ScorePresentation =
@@ -89,6 +90,7 @@ function buildEvidenceGaps(input: {
   useCompatibility?: UseCompatibilityResult;
   zoningResolutionState: "scored" | "not_evaluated";
   regulatoryRecords?: RegulatoryRecordsResult;
+  historicDesignation?: HistoricDesignationResult;
 }): EvidenceGap[] {
   const evidenceGaps: EvidenceGap[] = [];
 
@@ -148,6 +150,27 @@ function buildEvidenceGaps(input: {
     });
   }
 
+  if (
+    input.historicDesignation &&
+    input.historicDesignation.districts.status !== "ok"
+  ) {
+    evidenceGaps.push({
+      label: "City historic districts",
+      state: "NOT_EVALUATED",
+      category: "historic_source",
+    });
+  }
+  if (
+    input.historicDesignation &&
+    input.historicDesignation.sites.status !== "ok"
+  ) {
+    evidenceGaps.push({
+      label: "City individual historic sites",
+      state: "NOT_EVALUATED",
+      category: "historic_source",
+    });
+  }
+
   for (const label of UNIMPLEMENTED_DUE_DILIGENCE_ITEMS) {
     evidenceGaps.push({
       label,
@@ -168,6 +191,7 @@ export function buildDecisionSnapshot(input: {
   flood: FloodLookupResult;
   useCompatibility?: UseCompatibilityResult;
   regulatoryRecords?: RegulatoryRecordsResult;
+  historicDesignation?: HistoricDesignationResult;
 }): DecisionSnapshot {
   const coverage = computeEvidenceCoverage(input);
   const zoningResolution = resolveZoningScore({
@@ -192,6 +216,7 @@ export function buildDecisionSnapshot(input: {
     flood: input.flood,
     useCompatibility: input.useCompatibility,
     regulatoryRecords: input.regulatoryRecords,
+    historicDesignation: input.historicDesignation,
   });
 
   return {
@@ -211,6 +236,7 @@ export function buildDecisionSnapshot(input: {
       useCompatibility: input.useCompatibility,
       zoningResolutionState: zoningResolution.state,
       regulatoryRecords: input.regulatoryRecords,
+      historicDesignation: input.historicDesignation,
     }),
   };
 }

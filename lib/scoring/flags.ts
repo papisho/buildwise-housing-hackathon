@@ -1,3 +1,4 @@
+import type { HistoricDesignationResult } from "@/lib/historic";
 import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
@@ -15,7 +16,9 @@ export type CriticalFlagType =
   | "ZONING_USE_REVIEW"
   | "SPLIT_ZONING_REVIEW"
   | "OPEN_PERMIT_REVIEW"
-  | "VIOLATION_REVIEW";
+  | "VIOLATION_REVIEW"
+  | "HISTORIC_DISTRICT_REVIEW"
+  | "HISTORIC_SITE_REVIEW";
 
 export type CriticalFlag = {
   type: CriticalFlagType;
@@ -55,6 +58,7 @@ export function buildCriticalFlags(input: {
   flood: FloodLookupResult;
   useCompatibility?: UseCompatibilityResult;
   regulatoryRecords?: RegulatoryRecordsResult;
+  historicDesignation?: HistoricDesignationResult;
 }): CriticalFlag[] {
   const flags: CriticalFlag[] = [];
   const zoning = input.useCompatibility;
@@ -236,6 +240,39 @@ export function buildCriticalFlags(input: {
       verificationAction:
         "Verify unresolved violations with the issuing department before relying on this screening.",
       overlapPercent: null,
+    });
+  }
+
+  const historic = input.historicDesignation;
+  if (historic?.districts.status === "ok" && historic.districts.intersects) {
+    const names = historic.districts.districts.map((district) => district.name).join("; ");
+    const overlap = historic.districts.overlapPercent;
+    flags.push({
+      type: "HISTORIC_DISTRICT_REVIEW",
+      level: "REVIEW",
+      title: "Historic district review",
+      finding: `Mapped City historic district intersects this parcel${overlapDetail(overlap)}${names ? `: ${names}` : "."}`,
+      whyItMatters:
+        "Historic district designation can add review time and design constraints. It is not a determination that demolition is prohibited, that exterior work is prohibited, or that the project cannot proceed.",
+      verificationAction:
+        "Verify current designation status and whether the proposed scope triggers historic/design review with Pittsburgh Historic Review / City Planning.",
+      overlapPercent: overlap,
+    });
+  }
+
+  if (historic?.sites.status === "ok" && historic.sites.intersects) {
+    const names = historic.sites.sites.map((site) => site.name).join("; ");
+    const overlap = historic.sites.overlapPercent;
+    flags.push({
+      type: "HISTORIC_SITE_REVIEW",
+      level: "REVIEW",
+      title: "Historic site review",
+      finding: `Mapped individually designated historic site intersects this parcel${overlapDetail(overlap)}${names ? `: ${names}` : "."}`,
+      whyItMatters:
+        "Individual historic designation can add review time and design constraints. It is not a determination that demolition is prohibited, that exterior work is prohibited, or that the project cannot proceed.",
+      verificationAction:
+        "Verify current individual designation status and demolition/exterior-alteration requirements with Pittsburgh Historic Review / City Planning.",
+      overlapPercent: overlap,
     });
   }
 

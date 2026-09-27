@@ -29,6 +29,8 @@ import {
   findUnderminedForPin,
   type UnderminedLookupResult,
 } from "@/lib/hazards/undermined";
+import { lookupHistoricDesignation } from "@/lib/historic";
+import type { HistoricDesignationResult } from "@/lib/historic";
 import { lookupRegulatoryRecords } from "@/lib/regulatory";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import {
@@ -77,6 +79,7 @@ export type AddressToParcelResult =
       undermined: UnderminedLookupResult;
       flood: FloodLookupResult;
       regulatoryRecords: RegulatoryRecordsResult;
+      historicDesignation: HistoricDesignationResult;
       decision: DecisionSnapshot;
       recommendedVerification: string[];
       aiSummary: ClaudeExplanationResult;
@@ -165,12 +168,13 @@ async function lookupSiteEvidence(
   undermined: UnderminedLookupResult;
   flood: FloodLookupResult;
   regulatoryRecords: RegulatoryRecordsResult;
+  historicDesignation: HistoricDesignationResult;
 }> {
   const parcelGeometry = await findParcelEsriGeometryByPin(pin, 2272);
   const geometry =
     parcelGeometry.status === "ok" ? parcelGeometry.geometry : undefined;
 
-  const [assessment, zoning, steepSlope, landslide, undermined, flood] =
+  const [assessment, zoning, steepSlope, landslide, undermined, flood, historicDesignation] =
     await Promise.all([
       findAssessmentByParid(pin),
       lookupZoningForPin(pin, parcelGeometry),
@@ -198,6 +202,53 @@ async function lookupSiteEvidence(
           message: "Flood: Not Evaluated",
         }),
       ),
+      lookupHistoricDesignation({ pin, geometry }).catch(
+        (): HistoricDesignationResult => ({
+          overallStatus: "HISTORIC_STATUS_NOT_EVALUATED",
+          overallStatusLabel: "Historic status not evaluated",
+          parcelId: pin,
+          message:
+            "Historic designation was Not Evaluated. Missing historic evidence is not treated as the absence of designation.",
+          partialEvidence: false,
+          unevaluatedLayers: [
+            "City historic districts",
+            "City individual historic sites",
+          ],
+          districts: {
+            status: "not_evaluated",
+            message: "Historic districts: Not Evaluated",
+            source: {
+              name: "City of Pittsburgh / WPRDC City Designated Historic Districts",
+              datasetUrl:
+                "https://data.wprdc.org/dataset/city-designated-historic-districts",
+              queryUrl:
+                "https://services1.arcgis.com/YZCmUqbcsUpOKfj7/arcgis/rest/services/PGHWebCHDHistoricDistricts/FeatureServer/0/query",
+              resourceId: "a7d619d1-b074-4f5b-959e-dc2389e85425",
+              crs: "EPSG:2272",
+              sourceLastModified: null,
+              retrievedAt: new Date().toISOString(),
+            },
+          },
+          sites: {
+            status: "not_evaluated",
+            message: "Individual historic sites: Not Evaluated",
+            source: {
+              name: "City of Pittsburgh / WPRDC City Designated Individual Historic Sites",
+              datasetUrl:
+                "https://data.wprdc.org/dataset/city-designated-individual-historic-sites",
+              queryUrl:
+                "https://services1.arcgis.com/YZCmUqbcsUpOKfj7/arcgis/rest/services/PGHWEBCHDIndividialProperties/FeatureServer/0/query",
+              resourceId: "2a55085b-57e2-4b98-a784-a0ad7cbcc9fb",
+              crs: "EPSG:2272",
+              sourceLastModified: null,
+              retrievedAt: new Date().toISOString(),
+            },
+          },
+          limitations: [
+            "Historic designation was Not Evaluated because the lookup failed. Missing historic evidence is not treated as clear/favorable.",
+          ],
+        }),
+      ),
     ]);
 
   const regulatoryRecords = await lookupRegulatoryRecords({
@@ -215,6 +266,7 @@ async function lookupSiteEvidence(
     undermined,
     flood,
     regulatoryRecords,
+    historicDesignation,
   };
 }
 
@@ -326,6 +378,7 @@ async function completeOkResult(input: {
     undermined: UnderminedLookupResult;
     flood: FloodLookupResult;
     regulatoryRecords: RegulatoryRecordsResult;
+    historicDesignation: HistoricDesignationResult;
   };
 }): Promise<Extract<AddressToParcelResult, { status: "ok" }>> {
   const useCompatibility = evaluateUseCompatibility({
@@ -336,12 +389,14 @@ async function completeOkResult(input: {
     ...input.evidence,
     useCompatibility,
     regulatoryRecords: input.evidence.regulatoryRecords,
+    historicDesignation: input.evidence.historicDesignation,
   });
   const recommendedVerification = buildRecommendedVerification({
     ...input.evidence,
     useCompatibility,
     decision,
     regulatoryRecords: input.evidence.regulatoryRecords,
+    historicDesignation: input.evidence.historicDesignation,
   });
   const claudeContext = buildClaudeAnalysisInput({
     address: input.census.matchedAddress,
@@ -357,6 +412,7 @@ async function completeOkResult(input: {
     decision,
     recommendedVerification,
     regulatoryRecords: input.evidence.regulatoryRecords,
+    historicDesignation: input.evidence.historicDesignation,
   });
   const aiSummary = await explainAnalysis(claudeContext);
 

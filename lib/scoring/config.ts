@@ -59,7 +59,6 @@ export const UNIMPLEMENTED_DUE_DILIGENCE_ITEMS = [
   "Stormwater / drainage",
   "Legal lot / title / easements",
   "Certificate of Occupancy / existing legal use",
-  "Historic / design review",
   "Financial feasibility",
 ] as const;
 

@@ -2,6 +2,7 @@ import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
+import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
@@ -16,6 +17,7 @@ export function buildRecommendedVerification(input: {
   flood: FloodLookupResult;
   decision: DecisionSnapshot;
   regulatoryRecords?: RegulatoryRecordsResult;
+  historicDesignation?: HistoricDesignationResult;
 }): string[] {
   const steps: string[] = [];
 
@@ -164,8 +166,35 @@ export function buildRecommendedVerification(input: {
     }
   }
 
+  const historic = input.historicDesignation;
+  if (
+    historic &&
+    (historic.overallStatus === "HISTORIC_DISTRICT_REVIEW" ||
+      historic.overallStatus === "INDIVIDUAL_HISTORIC_DESIGNATION_REVIEW" ||
+      historic.overallStatus === "MULTIPLE_HISTORIC_REVIEW")
+  ) {
+    steps.push(
+      "Verify current historic designation status with Pittsburgh City Planning / Historic Review before relying on this screening.",
+    );
+    steps.push(
+      "Confirm whether the proposed scope triggers City historic/design review.",
+    );
+    steps.push(
+      "Where relevant, verify demolition and exterior-alteration requirements with Historic Review / City Planning. This screening does not determine that demolition or exterior work is prohibited.",
+    );
+    if (historic.partialEvidence) {
+      steps.push(
+        `Historic evidence is partial: ${historic.unevaluatedLayers.join(" and ")} ${historic.unevaluatedLayers.length === 1 ? "was" : "were"} Not Evaluated. Verify that missing historic sublayer with City Planning before treating this as a complete historic screening.`,
+      );
+    }
+  } else if (historic && historic.overallStatus === "HISTORIC_STATUS_NOT_EVALUATED") {
+    steps.push(
+      "Historic designation was Not Evaluated. Do not treat missing historic evidence as the absence of designation. Verify with City Planning if historic/design review may apply.",
+    );
+  }
+
   steps.push(
-    "Not independently evaluated in this MVP (require further due diligence; not scored): dimensional standards, overlays not separately evaluated, legal access/frontage, utilities/service capacity, stormwater/drainage, legal lot/title/easements, Certificate of Occupancy / existing legal use, historic/design review, and financial feasibility.",
+    "Not independently evaluated in this MVP (require further due diligence; not scored): dimensional standards, overlays not separately evaluated, legal access/frontage, utilities/service capacity, stormwater/drainage, legal lot/title/easements, Certificate of Occupancy / existing legal use, and financial feasibility.",
   );
 
   return steps;
