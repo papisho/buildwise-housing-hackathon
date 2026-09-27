@@ -3,6 +3,7 @@ import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
 import type { HistoricDesignationResult } from "@/lib/historic";
+import type { FinancialContextResult } from "@/lib/financial";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
@@ -18,6 +19,7 @@ export function buildRecommendedVerification(input: {
   decision: DecisionSnapshot;
   regulatoryRecords?: RegulatoryRecordsResult;
   historicDesignation?: HistoricDesignationResult;
+  financialContext?: FinancialContextResult;
 }): string[] {
   const steps: string[] = [];
 
@@ -192,6 +194,20 @@ export function buildRecommendedVerification(input: {
       "Historic designation was Not Evaluated. Do not treat missing historic evidence as the absence of designation. Verify with City Planning if historic/design review may apply.",
     );
   }
+
+  const financial = input.financialContext;
+  if (
+    !financial ||
+    financial.sales.status !== "ok" ||
+    financial.hud.status !== "ok"
+  ) {
+    steps.push(
+      "Financial context is incomplete: verify missing public sales and/or HUD FMR/SAFMR evidence before treating public market context as complete. Do not treat Not Evaluated financial sources as the absence of market or rent constraints.",
+    );
+  }
+  steps.push(
+    "Acquisition price, contractor bids, financing terms, site control, and achievable rents/sale prices still require developer inputs. Nearby sales and HUD FMR/SAFMR are not a financial-feasibility determination.",
+  );
 
   steps.push(
     "Not independently evaluated in this MVP (require further due diligence; not scored): dimensional standards, overlays not separately evaluated, legal access/frontage, utilities/service capacity, stormwater/drainage, legal lot/title/easements, Certificate of Occupancy / existing legal use, and financial feasibility.",

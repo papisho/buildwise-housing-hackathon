@@ -88,6 +88,56 @@ export type ClaudeAnalysisInput = {
     message: string;
     limitations: string[];
   };
+  financial_context: {
+    overall_status: string;
+    overall_status_label: string;
+    parcel_id: string;
+    sales_source_status: "EVALUATED" | "NOT_EVALUATED";
+    hud_source_status: "EVALUATED" | "NOT_EVALUATED";
+    nearby_sales: Array<{
+      parid: string;
+      address: string | null;
+      sale_date: string | null;
+      price: number;
+      distance_ft: number;
+      use_description: string | null;
+      lot_area_sqft: number | null;
+      year_built: number | null;
+      sale_code: string;
+      sale_description: string;
+      provenance: "PUBLIC_DATA";
+    }>;
+    hud: {
+      year: string;
+      geography_type: string;
+      zip: string | null;
+      area_name: string | null;
+      rents: {
+        efficiency: number | null;
+        one_bedroom: number | null;
+        two_bedroom: number | null;
+        three_bedroom: number | null;
+        four_bedroom: number | null;
+      };
+      provenance: "PUBLIC_DATA";
+    } | null;
+    scenario: {
+      provenance_inputs: "USER_ASSUMPTION";
+      provenance_results: "CALCULATED_FROM_USER_ASSUMPTIONS";
+      acquisition_cost: number;
+      units: number;
+      monthly_rent_per_unit: number;
+      total_hard_cost: number;
+      total_soft_cost: number;
+      contingency: number;
+      other_costs: number;
+      estimated_total_project_cost: number;
+      annual_gross_scheduled_rent: number;
+      project_cost_per_unit: number | null;
+      annual_gross_rent_to_cost_ratio: number | null;
+    } | null;
+    limitations: string[];
+  };
   overall_screening_status: string;
   score: {
     development_ease: number | null;

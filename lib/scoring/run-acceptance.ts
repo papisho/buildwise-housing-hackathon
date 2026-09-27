@@ -42,6 +42,7 @@ const assessmentOk: AssessmentLookupResult = {
     finishedLivingArea: null,
     taxYear: null,
     asOfDate: null,
+    propertyZip: null,
   },
 };
 

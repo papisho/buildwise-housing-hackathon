@@ -7,6 +7,12 @@ import { proposedProjectTypeLabel } from "@/lib/project-type";
 import type { ProposedProjectType } from "@/lib/project-type";
 import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
+import type { FinancialContextResult } from "@/lib/financial";
+import type { DevelopmentScenarioResult } from "@/lib/financial/types";
+import {
+  FINANCIAL_CONTEXT_LABELS,
+  resolveFinancialContextStatusFromFlags,
+} from "@/lib/financial/status";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
 import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
@@ -51,6 +57,7 @@ export function buildClaudeAnalysisInput(input: {
   recommendedVerification: string[];
   regulatoryRecords: RegulatoryRecordsResult;
   historicDesignation: HistoricDesignationResult;
+  financialContext: FinancialContextResult;
 }): ClaudeAnalysisInput {
   const facts =
     input.assessment.status === "ok" ? input.assessment.facts : null;
@@ -107,6 +114,7 @@ export function buildClaudeAnalysisInput(input: {
     historic_designation: compactHistoricDesignation(
       input.historicDesignation,
     ),
+    financial_context: compactFinancialContext(input.financialContext, null),
     overall_screening_status: input.decision.screeningStatus,
     score: {
       development_ease: input.decision.score.value,
@@ -233,6 +241,113 @@ function compactHistoricDesignation(
   };
 }
 
+function compactFinancialContext(
+  financial: FinancialContextResult,
+  scenario: DevelopmentScenarioResult | null,
+): ClaudeAnalysisInput["financial_context"] {
+  const overallStatus = resolveFinancialContextStatusFromFlags({
+    salesEvaluated: financial.sales.status === "ok",
+    hudEvaluated: financial.hud.status === "ok",
+    scenarioCalculated: Boolean(scenario),
+  });
+  const sales =
+    financial.sales.status === "ok" ? financial.sales.records : [];
+  return {
+    overall_status: overallStatus,
+    overall_status_label: FINANCIAL_CONTEXT_LABELS[overallStatus],
+    parcel_id: financial.parcelId,
+    sales_source_status:
+      financial.sales.status === "ok" ? "EVALUATED" : "NOT_EVALUATED",
+    hud_source_status:
+      financial.hud.status === "ok" ? "EVALUATED" : "NOT_EVALUATED",
+    nearby_sales: sales.map((sale) => ({
+      parid: sale.parid,
+      address: sale.address,
+      sale_date: sale.saleDate,
+      price: sale.price,
+      distance_ft: sale.distanceFeet,
+      use_description: sale.useDescription,
+      lot_area_sqft: sale.lotAreaSqFt,
+      year_built: sale.yearBuilt,
+      sale_code: sale.saleCode,
+      sale_description: sale.saleDescription,
+      provenance: "PUBLIC_DATA" as const,
+    })),
+    hud:
+      financial.hud.status === "ok"
+        ? {
+            year: financial.hud.year,
+            geography_type: financial.hud.geographyType,
+            zip: financial.hud.zip,
+            area_name: financial.hud.areaName,
+            rents: {
+              efficiency: financial.hud.rents.efficiency,
+              one_bedroom: financial.hud.rents.oneBedroom,
+              two_bedroom: financial.hud.rents.twoBedroom,
+              three_bedroom: financial.hud.rents.threeBedroom,
+              four_bedroom: financial.hud.rents.fourBedroom,
+            },
+            provenance: "PUBLIC_DATA",
+          }
+        : null,
+    scenario: scenario
+      ? {
+          provenance_inputs: "USER_ASSUMPTION",
+          provenance_results: "CALCULATED_FROM_USER_ASSUMPTIONS",
+          acquisition_cost: scenario.acquisitionCost,
+          units: scenario.inputs.units,
+          monthly_rent_per_unit: scenario.inputs.monthlyRentPerUnit,
+          total_hard_cost: scenario.totalHardCost,
+          total_soft_cost: scenario.totalSoftCost,
+          contingency: scenario.contingency,
+          other_costs: scenario.otherCosts,
+          estimated_total_project_cost: scenario.estimatedTotalProjectCost,
+          annual_gross_scheduled_rent: scenario.annualGrossScheduledRent,
+          project_cost_per_unit: scenario.projectCostPerUnit,
+          annual_gross_rent_to_cost_ratio: scenario.annualGrossRentToCostRatio,
+        }
+      : null,
+    limitations: financial.limitations,
+  };
+}
+
+export function withFinancialScenario(
+  context: ClaudeAnalysisInput,
+  scenario: DevelopmentScenarioResult | null,
+): ClaudeAnalysisInput {
+  const overallStatus = resolveFinancialContextStatusFromFlags({
+    salesEvaluated:
+      context.financial_context.sales_source_status === "EVALUATED",
+    hudEvaluated: context.financial_context.hud_source_status === "EVALUATED",
+    scenarioCalculated: Boolean(scenario),
+  });
+  return {
+    ...context,
+    financial_context: {
+      ...context.financial_context,
+      overall_status: overallStatus,
+      overall_status_label: FINANCIAL_CONTEXT_LABELS[overallStatus],
+      scenario: scenario
+        ? {
+            provenance_inputs: "USER_ASSUMPTION",
+            provenance_results: "CALCULATED_FROM_USER_ASSUMPTIONS",
+            acquisition_cost: scenario.acquisitionCost,
+            units: scenario.inputs.units,
+            monthly_rent_per_unit: scenario.inputs.monthlyRentPerUnit,
+            total_hard_cost: scenario.totalHardCost,
+            total_soft_cost: scenario.totalSoftCost,
+            contingency: scenario.contingency,
+            other_costs: scenario.otherCosts,
+            estimated_total_project_cost: scenario.estimatedTotalProjectCost,
+            annual_gross_scheduled_rent: scenario.annualGrossScheduledRent,
+            project_cost_per_unit: scenario.projectCostPerUnit,
+            annual_gross_rent_to_cost_ratio: scenario.annualGrossRentToCostRatio,
+          }
+        : null,
+    },
+  };
+}
+
 export const CLAUDE_SYSTEM_PROMPT = `You are an interpretive explanation layer for BuildWise, a preliminary Pittsburgh housing-site screening tool.
 
 This is decision support only. It is not legal, zoning, engineering, environmental, or financial advice.
@@ -244,13 +359,14 @@ Your job is to interpret what the supplied evidence means for the proposed housi
 Grounding rule (applies to every field, including summary, why_this_matters, limitations, what_could_change_the_result, and questions_for_human_review):
 Do not introduce hypothetical constraints, overlays, regulations, hazards, infrastructure issues, ownership issues, financial issues, or missing evidence unless they are explicitly present in the structured payload as evaluated findings or Not Evaluated items. If the payload does not mention a factor, do not raise it as a potential issue or due-diligence item.
 
-Stay inside the payload keys and values only: analysis_type, property, proposed_project, zoning, site_conditions, environment, regulatory_records, historic_designation, overall_screening_status, score, critical_flags, not_evaluated, recommended_verification. If a sentence would require a factor that is not one of those keys or their values, omit the sentence. Exception: limitations may include the required core-hazard-coverage caveat below, which names site-design, infrastructure, environmental, and regulatory assessment only to say they are not complete.
+Stay inside the payload keys and values only: analysis_type, property, proposed_project, zoning, site_conditions, environment, regulatory_records, historic_designation, financial_context, overall_screening_status, score, critical_flags, not_evaluated, recommended_verification. If a sentence would require a factor that is not one of those keys or their values, omit the sentence. Exception: limitations may include the required core-hazard-coverage caveat below, which names site-design, infrastructure, environmental, and regulatory assessment only to say they are not complete.
 
 Reasoning you SHOULD do, using only the payload:
 - Identify which evaluated constraints matter most for this proposed housing type, and rank them as bottlenecks. A bottleneck must cite an evaluated field (use_status, a Critical Flag, a hazard with intersects/overlap, or regulatory_records with clearly unresolved review_class).
 - Explain why those evaluated constraints matter for screening. When evaluated mapped hazard layers show no intersection, why_this_matters must include this exact sentence and no other hazard-scope wording: "No barriers were identified in the currently evaluated mapped hazard layers." Do not mention site-design barriers, environmental-review barriers, physical barriers, or that barriers are not immediately apparent. The remaining sentences may discuss use_status, Critical Flags, and regulatory_records only.
 - You may summarize permit/violation history from regulatory_records, explain why unresolved records matter for screening, and suggest verification questions already aligned with recommended_verification.
 - You may summarize historic_designation evidence (district/site names, overlap, overall_status, partial_evidence). Historic designation can create additional review/design constraints. You must not claim historic approval is required unless overall_status is HISTORIC_DISTRICT_REVIEW, INDIVIDUAL_HISTORIC_DESIGNATION_REVIEW, or MULTIPLE_HISTORIC_REVIEW. Even then, say review may apply; do not claim demolition is prohibited, exterior work is prohibited, or the project is infeasible. Do not invent preservation rules. Treat districts_source_status or sites_source_status of NOT_EVALUATED as Not Evaluated, never as no designation. If partial_evidence is true, say the historic screening is incomplete.
+- You may summarize financial_context. Nearby sales and HUD values are PUBLIC_DATA market/regulatory context only; do not label nearby_sales as comps or comparables. If scenario is present, you may restate the stored arithmetic and distinguish USER_ASSUMPTION inputs from CALCULATED_FROM_USER_ASSUMPTIONS results. You must not invent rent, acquisition price, or construction cost; must not convert HUD FMR/SAFMR into assumed market rent; must not recommend an investment; and must not declare financial feasibility, profit, ROI, IRR, cap rate, DSCR, or bankability. Treat sales_source_status or hud_source_status of NOT_EVALUATED as Not Evaluated, never as no market.
 - You must not infer legal status, claim a permit guarantees entitlement, claim a closed or completed record means all regulatory issues are resolved, or invent violations or conditions. No record in the queried dataset is not proof that no regulatory issue exists. Do not treat permits_source_status or violations_source_status of NOT_EVALUATED as clear or favorable.
 - Explain interactions when more than one evaluated constraint is present (for example: a use-table mismatch can be the primary entitlement barrier while a modest steep-slope overlap is a separate constructability/cost uncertainty — without calling the site impossible).
 - Distinguish evaluated facts from items listed in not_evaluated. If an interpretation would require evidence that is not in the payload, omit that interpretation.
@@ -261,7 +377,7 @@ You MUST NOT:
 - Guess compatibility for districts marked NOT_IDENTIFIED. The bottleneck is that the encoded rule set did not identify the district; recommend interpretation, do not fill in a use path.
 - Convert a blank/NOT_COMPATIBLE use-table cell into an approval path, or convert PERMITTED_BY_RIGHT into extra invented zoning problems. If use_status is PERMITTED_BY_RIGHT, key_bottlenecks should be evaluated hazards/flags only; staff confirmation can be a question, not a second zoning problem.
 - Treat property_class or property_use as anything other than a current occupancy label.
-- Invent asking price, costs, rents, ROI, or owner willingness to sell.
+- Invent asking price, costs, rents, ROI, or owner willingness to sell. Do not replace financial_context arithmetic.
 - Treat county assessed values as market value or as proof of project complexity.
 - Declare the project approved, legal, safe, unbuildable, impossible, or financially viable.
 - Treat Not Evaluated items as “no hazard” or as a favorable finding.
@@ -296,6 +412,8 @@ You MAY:
 - explain why an evaluated finding matters;
 - summarize regulatory_records history and why unresolved records matter;
 - summarize historic_designation evidence and why identified district/site intersection matters for review/design risk;
+- explain financial_context public sales/HUD benchmarks and, if present, restate user-entered scenario arithmetic;
+- distinguish PUBLIC_DATA from USER_ASSUMPTION and CALCULATED_FROM_USER_ASSUMPTIONS;
 - suggest verification questions already present in recommended_verification;
 - prioritize already-known concerns (flags, use_status, hazards, unresolved regulatory records, historic_designation);
 - turn payload evidence into a checklist;
@@ -304,6 +422,10 @@ You MAY:
 
 You MUST NOT:
 - invent parcel facts, zoning rules, hazards, overlays, rents, costs, or owner intent;
+- convert HUD FMR/SAFMR into assumed market rent or achievable project rent;
+- replace deterministic financial_context arithmetic or invent a pro forma;
+- declare financial feasibility, profit, ROI, IRR, NPV, cap rate, DSCR, bankability, or investment-worthiness;
+- label nearby_sales as comps or comparables;
 - infer legal status from permits or violations;
 - claim a permit guarantees entitlement;
 - claim a closed or completed record means all regulatory issues are resolved;

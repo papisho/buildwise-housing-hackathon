@@ -50,6 +50,7 @@ export type ParcelFacts = {
   finishedLivingArea: number | null;
   taxYear: number | null;
   asOfDate: string | null;
+  propertyZip: string | null;
 };
 
 export type AssessmentLookupResult =
@@ -83,6 +84,21 @@ function readNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+export function readZip5(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(Math.trunc(value)).replace(/\D/g, "").padStart(5, "0").slice(-5);
+  }
+  const text = readText(value);
+  if (!text) {
+    return null;
+  }
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 5) {
+    return digits.length > 0 ? digits.padStart(5, "0") : null;
+  }
+  return digits.slice(0, 5);
 }
 
 function readPositiveNumber(value: unknown): number | null {
@@ -148,6 +164,7 @@ function normalizeFacts(record: Record<string, unknown>): ParcelFacts | null {
     finishedLivingArea: readPositiveNumber(picked.FINISHEDLIVINGAREA),
     taxYear: readPositiveNumber(picked.TAXYEAR),
     asOfDate: readText(picked.ASOFDATE),
+    propertyZip: readZip5(picked.PROPERTYZIP),
   };
 }
 

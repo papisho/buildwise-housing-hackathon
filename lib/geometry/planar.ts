@@ -84,3 +84,52 @@ export function intersectionAreaSqFt(
 export function esriPolygonAreaSqFt(rings: number[][][]): number {
   return planarAreaSqFt(esriRingsToMultiPolygon(rings));
 }
+
+export function esriRingsCentroid(
+  rings: number[][][],
+): { x: number; y: number } | null {
+  let best: Ring | null = null;
+  let bestAbs = 0;
+  for (const raw of rings) {
+    const ring = xyRing(raw);
+    if (ring.length < 4) {
+      continue;
+    }
+    const area = Math.abs(signedArea(ring));
+    if (area > bestAbs) {
+      bestAbs = area;
+      best = ring;
+    }
+  }
+  if (!best) {
+    return null;
+  }
+
+  let cx = 0;
+  let cy = 0;
+  let twiceArea = 0;
+  for (let i = 0; i < best.length - 1; i += 1) {
+    const x0 = best[i][0];
+    const y0 = best[i][1];
+    const x1 = best[i + 1][0];
+    const y1 = best[i + 1][1];
+    const cross = x0 * y1 - x1 * y0;
+    twiceArea += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  if (twiceArea === 0) {
+    return { x: best[0][0], y: best[0][1] };
+  }
+  return {
+    x: cx / (3 * twiceArea),
+    y: cy / (3 * twiceArea),
+  };
+}
+
+export function planarDistanceFeet(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}

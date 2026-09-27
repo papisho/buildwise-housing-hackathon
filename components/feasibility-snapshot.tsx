@@ -21,8 +21,7 @@ import type {
 } from "@/lib/zoning/compatibility";
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 import type { ClaudeExplanationResult } from "@/lib/claude/types";
-import { AskBuildWiseAI } from "@/components/ask-buildwise-ai";
-import { FinancialFeasibilityNotAssessed } from "@/components/financial-feasibility";
+import { FinancialContextWithChat } from "@/components/financial-feasibility";
 import { StatusBadge } from "@/components/status-badge";
 
 type OkResult = Extract<AddressToParcelResult, { status: "ok" }>;
@@ -110,13 +109,12 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
       <HowScoringWorks decision={result.decision} />
       <RecommendedVerification steps={result.recommendedVerification} />
       <AiExplanation aiSummary={result.aiSummary} />
-      <AskBuildWiseAI
-        key={`${result.parcel.pin}:${result.request.proposedProjectType}`}
-        context={result.claudeContext}
+      <FinancialContextWithChat
+        financial={result.financialContext}
+        claudeContext={result.claudeContext}
         sessionKey={`${result.parcel.pin}:${result.request.proposedProjectType}`}
       />
       <SourcesAndAssumptions result={result} />
-      <FinancialFeasibilityNotAssessed />
       <ParcelFactsDetail
         pin={result.parcel.pin}
         assessment={result.assessment}
@@ -1788,6 +1786,52 @@ function buildSourceRows(result: OkResult) {
   rows.push(
     regulatorySourceRow("violations", result.regulatoryRecords.violations),
   );
+  rows.push({
+    key: "nearby-sales",
+    source: result.financialContext.sales.status === "ok"
+      ? result.financialContext.sales.source.name
+      : "Allegheny County / WPRDC Property Sale Transactions",
+    href: "https://data.wprdc.org/dataset/real-estate-sales",
+    finding:
+      result.financialContext.sales.status === "ok"
+        ? result.financialContext.sales.records.length > 0
+          ? `${result.financialContext.sales.records.length} County-coded VALID SALE (SALECODE 0) nearby sale record(s)`
+          : "No validated nearby sales in search radius"
+        : "Not Evaluated",
+    method: `Parcel-geometry proximity in EPSG:2272, then PARID join; filter ${
+      result.financialContext.sales.status === "ok"
+        ? result.financialContext.sales.validatedFilter
+        : "SALECODE 0 / VALID SALE"
+    }`,
+    vintage:
+      result.financialContext.sales.status === "ok"
+        ? `${result.financialContext.sales.source.sourceLastModified ?? "not reported"} · retrieved ${result.financialContext.sales.source.retrievedAt}`
+        : result.financialContext.sales.source.retrievedAt,
+    limitation:
+      "Nearby Sales Context only. These properties have not been determined to be comparable. Radius and 5-year lookback are BuildWise heuristics. Assessed characteristics of sold parcels are not market value.",
+  });
+  rows.push({
+    key: "hud-fmr",
+    source: result.financialContext.hud.status === "ok"
+      ? result.financialContext.hud.source.name
+      : "HUD Fair Market Rents / Small Area FMRs",
+    href: "https://www.huduser.gov/portal/datasets/fmr.html",
+    finding:
+      result.financialContext.hud.status === "ok"
+        ? `FY ${result.financialContext.hud.year} ${
+            result.financialContext.hud.geographyType === "ZIP_SAFMR"
+              ? `ZIP ${result.financialContext.hud.zip} SAFMR`
+              : "metro-area FMR"
+          }`
+        : "Not Evaluated",
+    method: "HUD User FMR API for METRO38300M38300 using assessment PROPERTYZIP",
+    vintage:
+      result.financialContext.hud.status === "ok"
+        ? `FY ${result.financialContext.hud.year} · retrieved ${result.financialContext.hud.source.retrievedAt}`
+        : result.financialContext.hud.source.retrievedAt,
+    limitation:
+      "Regulatory FMR/SAFMR benchmark, not market rent or assumed project rent.",
+  });
 
   rows.push({
     key: "score",

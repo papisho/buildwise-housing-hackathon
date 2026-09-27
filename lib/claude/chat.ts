@@ -302,6 +302,200 @@ function parseHistoricDesignation(
   };
 }
 
+function parseFinancialContext(
+  value: unknown,
+): ClaudeAnalysisInput["financial_context"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const overallStatus = asString(value.overall_status);
+  const overallLabel = asString(value.overall_status_label);
+  const parcelId = asString(value.parcel_id);
+  const limitations = asStringArray(value.limitations);
+  if (
+    !overallStatus ||
+    !overallLabel ||
+    !parcelId ||
+    !limitations ||
+    (value.sales_source_status !== "EVALUATED" &&
+      value.sales_source_status !== "NOT_EVALUATED") ||
+    (value.hud_source_status !== "EVALUATED" &&
+      value.hud_source_status !== "NOT_EVALUATED") ||
+    !Array.isArray(value.nearby_sales)
+  ) {
+    return null;
+  }
+  const nearbySales: ClaudeAnalysisInput["financial_context"]["nearby_sales"] =
+    [];
+  for (const item of value.nearby_sales) {
+    if (!isRecord(item) || item.provenance !== "PUBLIC_DATA") {
+      return null;
+    }
+    const parid = asString(item.parid);
+    const saleCode = asString(item.sale_code);
+    const saleDescription = asString(item.sale_description);
+    const price = asNumberOrNull(item.price);
+    const distance = asNumberOrNull(item.distance_ft);
+    if (
+      !parid ||
+      !saleCode ||
+      !saleDescription ||
+      price === undefined ||
+      price === null ||
+      distance === undefined ||
+      distance === null
+    ) {
+      return null;
+    }
+    const address = asStringOrNull(item.address);
+    const saleDate = asStringOrNull(item.sale_date);
+    const useDescription = asStringOrNull(item.use_description);
+    const lotArea = asNumberOrNull(item.lot_area_sqft);
+    const yearBuilt = asNumberOrNull(item.year_built);
+    if (
+      address === undefined ||
+      saleDate === undefined ||
+      useDescription === undefined ||
+      lotArea === undefined ||
+      yearBuilt === undefined
+    ) {
+      return null;
+    }
+    nearbySales.push({
+      parid,
+      address,
+      sale_date: saleDate,
+      price,
+      distance_ft: distance,
+      use_description: useDescription,
+      lot_area_sqft: lotArea,
+      year_built: yearBuilt,
+      sale_code: saleCode,
+      sale_description: saleDescription,
+      provenance: "PUBLIC_DATA",
+    });
+  }
+
+  let hud: ClaudeAnalysisInput["financial_context"]["hud"] = null;
+  if (value.hud !== null && value.hud !== undefined) {
+    if (!isRecord(value.hud) || value.hud.provenance !== "PUBLIC_DATA") {
+      return null;
+    }
+    if (!isRecord(value.hud.rents)) {
+      return null;
+    }
+    const year = asString(value.hud.year);
+    const geographyType = asString(value.hud.geography_type);
+    const zip = asStringOrNull(value.hud.zip);
+    const areaName = asStringOrNull(value.hud.area_name);
+    const efficiency = asNumberOrNull(value.hud.rents.efficiency);
+    const oneBedroom = asNumberOrNull(value.hud.rents.one_bedroom);
+    const twoBedroom = asNumberOrNull(value.hud.rents.two_bedroom);
+    const threeBedroom = asNumberOrNull(value.hud.rents.three_bedroom);
+    const fourBedroom = asNumberOrNull(value.hud.rents.four_bedroom);
+    if (
+      !year ||
+      !geographyType ||
+      zip === undefined ||
+      areaName === undefined ||
+      efficiency === undefined ||
+      oneBedroom === undefined ||
+      twoBedroom === undefined ||
+      threeBedroom === undefined ||
+      fourBedroom === undefined
+    ) {
+      return null;
+    }
+    hud = {
+      year,
+      geography_type: geographyType,
+      zip,
+      area_name: areaName,
+      rents: {
+        efficiency,
+        one_bedroom: oneBedroom,
+        two_bedroom: twoBedroom,
+        three_bedroom: threeBedroom,
+        four_bedroom: fourBedroom,
+      },
+      provenance: "PUBLIC_DATA",
+    };
+  }
+
+  let scenario: ClaudeAnalysisInput["financial_context"]["scenario"] = null;
+  if (value.scenario !== null && value.scenario !== undefined) {
+    if (
+      !isRecord(value.scenario) ||
+      value.scenario.provenance_inputs !== "USER_ASSUMPTION" ||
+      value.scenario.provenance_results !== "CALCULATED_FROM_USER_ASSUMPTIONS"
+    ) {
+      return null;
+    }
+    const acquisition = asNumberOrNull(value.scenario.acquisition_cost);
+    const units = asNumberOrNull(value.scenario.units);
+    const monthlyRent = asNumberOrNull(value.scenario.monthly_rent_per_unit);
+    const hard = asNumberOrNull(value.scenario.total_hard_cost);
+    const soft = asNumberOrNull(value.scenario.total_soft_cost);
+    const contingency = asNumberOrNull(value.scenario.contingency);
+    const other = asNumberOrNull(value.scenario.other_costs);
+    const total = asNumberOrNull(value.scenario.estimated_total_project_cost);
+    const annual = asNumberOrNull(value.scenario.annual_gross_scheduled_rent);
+    const perUnit = asNumberOrNull(value.scenario.project_cost_per_unit);
+    const ratio = asNumberOrNull(value.scenario.annual_gross_rent_to_cost_ratio);
+    if (
+      acquisition === undefined ||
+      acquisition === null ||
+      units === undefined ||
+      units === null ||
+      monthlyRent === undefined ||
+      monthlyRent === null ||
+      hard === undefined ||
+      hard === null ||
+      soft === undefined ||
+      soft === null ||
+      contingency === undefined ||
+      contingency === null ||
+      other === undefined ||
+      other === null ||
+      total === undefined ||
+      total === null ||
+      annual === undefined ||
+      annual === null ||
+      perUnit === undefined ||
+      ratio === undefined
+    ) {
+      return null;
+    }
+    scenario = {
+      provenance_inputs: "USER_ASSUMPTION",
+      provenance_results: "CALCULATED_FROM_USER_ASSUMPTIONS",
+      acquisition_cost: acquisition,
+      units,
+      monthly_rent_per_unit: monthlyRent,
+      total_hard_cost: hard,
+      total_soft_cost: soft,
+      contingency,
+      other_costs: other,
+      estimated_total_project_cost: total,
+      annual_gross_scheduled_rent: annual,
+      project_cost_per_unit: perUnit,
+      annual_gross_rent_to_cost_ratio: ratio,
+    };
+  }
+
+  return {
+    overall_status: overallStatus,
+    overall_status_label: overallLabel,
+    parcel_id: parcelId,
+    sales_source_status: value.sales_source_status,
+    hud_source_status: value.hud_source_status,
+    nearby_sales: nearbySales,
+    hud,
+    scenario,
+    limitations,
+  };
+}
+
 function parseFactorContributions(
   value: unknown,
 ): ClaudeAnalysisInput["score"]["factor_contributions"] | null {
@@ -519,11 +713,13 @@ export function parseClaudeAnalysisInput(
   const historicDesignation = parseHistoricDesignation(
     value.historic_designation,
   );
+  const financialContext = parseFinancialContext(value.financial_context);
   if (
     !notEvaluated ||
     !recommended ||
     !regulatoryRecords ||
-    !historicDesignation
+    !historicDesignation ||
+    !financialContext
   ) {
     return null;
   }
@@ -558,6 +754,7 @@ export function parseClaudeAnalysisInput(
     },
     regulatory_records: regulatoryRecords,
     historic_designation: historicDesignation,
+    financial_context: financialContext,
     overall_screening_status: screeningStatus,
     score: {
       development_ease: developmentEase,

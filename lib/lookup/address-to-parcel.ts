@@ -59,6 +59,10 @@ import {
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
+import { composeFinancialContext } from "@/lib/financial";
+import type { FinancialContextResult } from "@/lib/financial";
+import { findNearbyValidatedSales } from "@/lib/financial/sales";
+import { lookupHudRentBenchmark } from "@/lib/financial/hud";
 
 export type AnalysisRequest = {
   inputAddress: string;
@@ -80,6 +84,7 @@ export type AddressToParcelResult =
       flood: FloodLookupResult;
       regulatoryRecords: RegulatoryRecordsResult;
       historicDesignation: HistoricDesignationResult;
+      financialContext: FinancialContextResult;
       decision: DecisionSnapshot;
       recommendedVerification: string[];
       aiSummary: ClaudeExplanationResult;
@@ -169,10 +174,26 @@ async function lookupSiteEvidence(
   flood: FloodLookupResult;
   regulatoryRecords: RegulatoryRecordsResult;
   historicDesignation: HistoricDesignationResult;
+  financialContext: FinancialContextResult;
 }> {
   const parcelGeometry = await findParcelEsriGeometryByPin(pin, 2272);
   const geometry =
     parcelGeometry.status === "ok" ? parcelGeometry.geometry : undefined;
+
+  const salesPromise = findNearbyValidatedSales({ pin, geometry }).catch(
+    (): Awaited<ReturnType<typeof findNearbyValidatedSales>> => ({
+      status: "not_evaluated",
+      message: "Nearby sales: Not Evaluated because the lookup failed.",
+      source: {
+        name: "Allegheny County / WPRDC Property Sale Transactions",
+        datasetUrl: "https://data.wprdc.org/dataset/real-estate-sales",
+        queryUrl: "https://data.wprdc.org/api/3/action/datastore_search_sql",
+        resourceId: "5bbe6c55-bce6-4edb-9d04-68edeb6bf7b1",
+        sourceLastModified: null,
+        retrievedAt: new Date().toISOString(),
+      },
+    }),
+  );
 
   const [assessment, zoning, steepSlope, landslide, undermined, flood, historicDesignation] =
     await Promise.all([
@@ -251,12 +272,34 @@ async function lookupSiteEvidence(
       ),
     ]);
 
-  const regulatoryRecords = await lookupRegulatoryRecords({
-    // Canonical County PIN from address-to-parcel; not independently resolved.
-    pin,
-    assessment,
-    censusMatchedAddress,
-  });
+  const zip =
+    assessment.status === "ok" ? assessment.facts.propertyZip : null;
+  const [regulatoryRecords, sales, hud] = await Promise.all([
+    lookupRegulatoryRecords({
+      // Canonical County PIN from address-to-parcel; not independently resolved.
+      pin,
+      assessment,
+      censusMatchedAddress,
+    }),
+    salesPromise,
+    lookupHudRentBenchmark({ zip }).catch(
+      (): Awaited<ReturnType<typeof lookupHudRentBenchmark>> => ({
+        status: "not_evaluated",
+        message: "HUD rent benchmark: Not Evaluated because the lookup failed.",
+        source: {
+          name: "HUD Fair Market Rents / Small Area FMRs",
+          datasetUrl: "https://www.huduser.gov/portal/datasets/fmr.html",
+          queryUrl:
+            "https://www.huduser.gov/hudapi/public/fmr/data/METRO38300M38300",
+          resourceId: "METRO38300M38300",
+          sourceLastModified: null,
+          retrievedAt: new Date().toISOString(),
+        },
+      }),
+    ),
+  ]);
+
+  const financialContext = composeFinancialContext({ pin, sales, hud });
 
   return {
     assessment,
@@ -267,6 +310,7 @@ async function lookupSiteEvidence(
     flood,
     regulatoryRecords,
     historicDesignation,
+    financialContext,
   };
 }
 
@@ -379,24 +423,27 @@ async function completeOkResult(input: {
     flood: FloodLookupResult;
     regulatoryRecords: RegulatoryRecordsResult;
     historicDesignation: HistoricDesignationResult;
+    financialContext: FinancialContextResult;
   };
 }): Promise<Extract<AddressToParcelResult, { status: "ok" }>> {
+  const { financialContext, ...scoredEvidence } = input.evidence;
   const useCompatibility = evaluateUseCompatibility({
     proposedProjectType: input.request.proposedProjectType,
     zoning: input.evidence.zoning,
   });
   const decision = buildDecisionSnapshot({
-    ...input.evidence,
+    ...scoredEvidence,
     useCompatibility,
     regulatoryRecords: input.evidence.regulatoryRecords,
     historicDesignation: input.evidence.historicDesignation,
   });
   const recommendedVerification = buildRecommendedVerification({
-    ...input.evidence,
+    ...scoredEvidence,
     useCompatibility,
     decision,
     regulatoryRecords: input.evidence.regulatoryRecords,
     historicDesignation: input.evidence.historicDesignation,
+    financialContext,
   });
   const claudeContext = buildClaudeAnalysisInput({
     address: input.census.matchedAddress,
@@ -413,6 +460,7 @@ async function completeOkResult(input: {
     recommendedVerification,
     regulatoryRecords: input.evidence.regulatoryRecords,
     historicDesignation: input.evidence.historicDesignation,
+    financialContext,
   });
   const aiSummary = await explainAnalysis(claudeContext);
 
