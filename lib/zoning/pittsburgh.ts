@@ -1,4 +1,8 @@
-import type { ParcelPolygon } from "@/lib/parcels/allegheny";
+import {
+  esriPolygonAreaSqFt,
+  intersectionAreaSqFt,
+} from "@/lib/geometry/planar";
+import type { EsriPolygon, ParcelPolygon } from "@/lib/parcels/allegheny";
 
 const ZONING_QUERY_URL =
   "https://services1.arcgis.com/YZCmUqbcsUpOKfj7/arcgis/rest/services/PGHWebZoning/FeatureServer/0/query";
@@ -10,6 +14,7 @@ const CITY_ZONING_MAP_URL =
 const CITY_ZONING_PAGE_URL =
   "https://www.pittsburghpa.gov/Business-Development/City-Planning/Zoning";
 const REQUEST_TIMEOUT_MS = 15_000;
+const PA_STATE_PLANE_SOUTH_FT = 2272;
 
 export type ZoningDistrict = {
   code: string;
@@ -17,6 +22,8 @@ export type ZoningDistrict = {
   legendType: string | null;
   status: string | null;
   correctionLabel: string | null;
+  intersectionAreaSqFt: number | null;
+  intersectionPercent: number | null;
 };
 
 export type ZoningSource = {
@@ -52,6 +59,7 @@ type ArcGisAttributeValue = string | number | boolean | null;
 
 type ArcGisFeature = {
   attributes?: Record<string, ArcGisAttributeValue>;
+  geometry?: { rings?: number[][][] };
 };
 
 type ArcGisQueryResponse = {
@@ -77,7 +85,13 @@ function ringsFromParcel(geometry: ParcelPolygon): number[][][] {
   return geometry.coordinates.flat();
 }
 
-function parseDistrict(feature: ArcGisFeature): ZoningDistrict | null {
+function roundOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function parseDistrictAttributes(
+  feature: ArcGisFeature,
+): Omit<ZoningDistrict, "intersectionAreaSqFt" | "intersectionPercent"> | null {
   const code = readText(feature.attributes?.zon_new);
   if (!code) {
     return null;
@@ -92,14 +106,56 @@ function parseDistrict(feature: ArcGisFeature): ZoningDistrict | null {
   };
 }
 
-function uniqueDistricts(districts: ZoningDistrict[]): ZoningDistrict[] {
-  const unique = new Map<string, ZoningDistrict>();
-  for (const district of districts) {
-    if (!unique.has(district.code)) {
-      unique.set(district.code, district);
+function districtsFromFeatures(
+  features: ArcGisFeature[],
+  parcelRings2272?: number[][][],
+): ZoningDistrict[] {
+  const grouped = new Map<
+    string,
+    {
+      district: Omit<ZoningDistrict, "intersectionAreaSqFt" | "intersectionPercent">;
+      rings: number[][][];
+    }
+  >();
+
+  for (const feature of features) {
+    const parsed = parseDistrictAttributes(feature);
+    if (!parsed) {
+      continue;
+    }
+    const existing = grouped.get(parsed.code);
+    const rings = feature.geometry?.rings ?? [];
+    if (existing) {
+      existing.rings.push(...rings);
+    } else {
+      grouped.set(parsed.code, { district: parsed, rings: [...rings] });
     }
   }
-  return [...unique.values()];
+
+  const parcelArea =
+    parcelRings2272 && parcelRings2272.length > 0
+      ? esriPolygonAreaSqFt(parcelRings2272)
+      : 0;
+
+  return [...grouped.values()].map(({ district, rings }) => {
+    if (!parcelRings2272 || rings.length === 0 || parcelArea <= 0) {
+      return {
+        ...district,
+        intersectionAreaSqFt: null,
+        intersectionPercent: null,
+      };
+    }
+    const overlapArea = intersectionAreaSqFt(parcelRings2272, rings);
+    const intersectionPercent =
+      overlapArea !== null
+        ? Math.min(100, roundOneDecimal((overlapArea / parcelArea) * 100))
+        : null;
+    return {
+      ...district,
+      intersectionAreaSqFt: overlapArea,
+      intersectionPercent,
+    };
+  });
 }
 
 async function readSourceVintage(): Promise<string | null> {
@@ -144,25 +200,33 @@ async function zoningSource(): Promise<ZoningSource> {
   };
 }
 
-export async function findZoningForParcelGeometry(
-  geometry: ParcelPolygon,
-): Promise<ZoningLookupResult> {
-  const source = await zoningSource();
+async function queryZoningFeatures(input: {
+  rings: number[][][];
+  inSR: string;
+  returnGeometry: boolean;
+  outSR?: string;
+}): Promise<
+  | { status: "ok"; features: ArcGisFeature[] }
+  | { status: "unavailable"; message: string }
+> {
   const esriGeometry = JSON.stringify({
-    rings: ringsFromParcel(geometry),
-    spatialReference: { wkid: 4326 },
+    rings: input.rings,
+    spatialReference: { wkid: Number(input.inSR) },
   });
 
   const body = new URLSearchParams({
     geometry: esriGeometry,
     geometryType: "esriGeometryPolygon",
-    inSR: "4326",
+    inSR: input.inSR,
     spatialRel: "esriSpatialRelIntersects",
     outFields:
       "zon_new,full_zoning_type,status,correctionlabel,legendtype,last_edited_date",
-    returnGeometry: "false",
+    returnGeometry: input.returnGeometry ? "true" : "false",
     f: "json",
   });
+  if (input.outSR) {
+    body.set("outSR", input.outSR);
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -195,26 +259,7 @@ export async function findZoningForParcelGeometry(
       };
     }
 
-    const districts = uniqueDistricts(
-      (payload.features ?? [])
-        .map(parseDistrict)
-        .filter((district): district is ZoningDistrict => district !== null),
-    );
-
-    if (districts.length === 0) {
-      return {
-        status: "no_district",
-        message: "Zoning not evaluated / no mapped district found.",
-        source,
-      };
-    }
-
-    return {
-      status: "ok",
-      districts,
-      splitZoning: districts.length > 1,
-      source,
-    };
+    return { status: "ok", features: payload.features ?? [] };
   } catch (error) {
     const aborted =
       error instanceof Error &&
@@ -229,4 +274,61 @@ export async function findZoningForParcelGeometry(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function finishZoningResult(
+  source: ZoningSource,
+  districts: ZoningDistrict[],
+): ZoningLookupResult {
+  if (districts.length === 0) {
+    return {
+      status: "no_district",
+      message: "Zoning not evaluated / no mapped district found.",
+      source,
+    };
+  }
+
+  return {
+    status: "ok",
+    districts,
+    splitZoning: districts.length > 1,
+    source,
+  };
+}
+
+export async function findZoningForParcelEsri(
+  geometry: EsriPolygon,
+): Promise<ZoningLookupResult> {
+  const source = await zoningSource();
+  const queried = await queryZoningFeatures({
+    rings: geometry.rings,
+    inSR: String(geometry.spatialReference.wkid || PA_STATE_PLANE_SOUTH_FT),
+    returnGeometry: true,
+    outSR: String(PA_STATE_PLANE_SOUTH_FT),
+  });
+  if (queried.status === "unavailable") {
+    return queried;
+  }
+  return finishZoningResult(
+    source,
+    districtsFromFeatures(queried.features, geometry.rings),
+  );
+}
+
+export async function findZoningForParcelGeometry(
+  geometry: ParcelPolygon,
+): Promise<ZoningLookupResult> {
+  const source = await zoningSource();
+  const queried = await queryZoningFeatures({
+    rings: ringsFromParcel(geometry),
+    inSR: "4326",
+    returnGeometry: false,
+  });
+  if (queried.status === "unavailable") {
+    return queried;
+  }
+  return finishZoningResult(
+    source,
+    districtsFromFeatures(queried.features),
+  );
 }

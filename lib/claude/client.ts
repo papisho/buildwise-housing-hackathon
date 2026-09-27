@@ -1,3 +1,4 @@
+import { readClaudeApiKey } from "@/lib/claude/env";
 import {
   CLAUDE_SYSTEM_PROMPT,
   buildClaudeAnalysisInput,
@@ -20,8 +21,7 @@ type AnthropicResponse = {
 };
 
 function readApiKey(): string | null {
-  const key = process.env.CLAUDE_API_KEY?.trim();
-  return key && key.length > 0 ? key : null;
+  return readClaudeApiKey();
 }
 
 function extractJsonObject(text: string): unknown {

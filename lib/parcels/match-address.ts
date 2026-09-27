@@ -124,10 +124,21 @@ export function houseAndStreetMatch(
     return false;
   }
 
-  return assessmentHouseNumbers(
+  const assessmentNumbers = assessmentHouseNumbers(
     assessmentHouseNumber,
     assessmentFraction,
-  ).includes(requested.houseNumber);
+  );
+  // County uses house number 0 for vacant/no-building records. That is never
+  // a match to a numbered input address.
+  if (
+    requested.houseNumber !== "0" &&
+    assessmentNumbers.length > 0 &&
+    assessmentNumbers.every((number) => number === "0")
+  ) {
+    return false;
+  }
+
+  return assessmentNumbers.includes(requested.houseNumber);
 }
 
 export function addressMatchesAssessment(

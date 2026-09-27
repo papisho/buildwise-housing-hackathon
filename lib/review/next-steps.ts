@@ -2,6 +2,7 @@ import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
+import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
 import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
@@ -14,6 +15,7 @@ export function buildRecommendedVerification(input: {
   undermined: UnderminedLookupResult;
   flood: FloodLookupResult;
   decision: DecisionSnapshot;
+  regulatoryRecords?: RegulatoryRecordsResult;
 }): string[] {
   const steps: string[] = [];
 
@@ -97,7 +99,61 @@ export function buildRecommendedVerification(input: {
     );
   }
 
+  const regulatory = input.regulatoryRecords;
+  if (!regulatory || regulatory.permits.status !== "ok") {
+    steps.push(
+      "PLI permits were not evaluated. Do not treat missing permit data as the absence of permit or approval issues.",
+    );
+  } else if (regulatory.unresolvedPermitCount > 0) {
+    steps.push(
+      "Verify unresolved permit status with Pittsburgh permitting staff / OneStopPGH before relying on this screening.",
+    );
+  } else if (
+    regulatory.permits.status === "ok" &&
+    regulatory.permits.records.some(
+      (record) => record.reviewClass === "REQUIRES_VERIFICATION",
+    )
+  ) {
+    steps.push(
+      "One or more queried permit statuses are ambiguous (for example Issued). Verify current status with Pittsburgh permitting staff / OneStopPGH. Do not treat Issued as proof that a permit is open or closed.",
+    );
+  } else {
+    steps.push(
+      "No unresolved permit statuses were identified in the queried PLI Permits feed. Confirm whether existing approvals or records affect the proposed housing use; absence from this feed is not proof that no permit issues exist.",
+    );
+  }
+
+  if (!regulatory || regulatory.violations.status !== "ok") {
+    steps.push(
+      "PLI/DOMI/ES violations were not evaluated. Do not treat missing violation data as the absence of code-enforcement issues.",
+    );
+  } else if (regulatory.unresolvedViolationCount > 0) {
+    steps.push(
+      "Verify unresolved violations with the issuing department before relying on this screening.",
+    );
+  } else if (
+    regulatory.violations.status === "ok" &&
+    regulatory.violations.records.some(
+      (record) => record.reviewClass === "REQUIRES_VERIFICATION",
+    )
+  ) {
+    steps.push(
+      "One or more queried violation statuses are ambiguous (for example Ready to Close). Verify current status with the issuing department before relying on this screening.",
+    );
+  } else {
+    steps.push(
+      "No unresolved violation statuses were identified in the queried PLI/DOMI/ES violations feed. This is not a finding that no regulatory issues exist.",
+    );
+  }
+
+  steps.push(
+    "Confirm whether existing approvals or records affect the proposed housing use with Pittsburgh permitting and zoning staff.",
+  );
+
   for (const gap of input.decision.evidenceGaps) {
+    if (gap.category !== "core_source") {
+      continue;
+    }
     const alreadyNoted = steps.some((step) =>
       step.toLowerCase().includes(gap.label.toLowerCase().split(" ")[0] ?? ""),
     );
@@ -109,7 +165,7 @@ export function buildRecommendedVerification(input: {
   }
 
   steps.push(
-    "Financial feasibility is not assessed. Do not infer asking price, costs, rents, or whether a project pencils.",
+    "Not independently evaluated in this MVP (require further due diligence; not scored): dimensional standards, overlays not separately evaluated, legal access/frontage, utilities/service capacity, stormwater/drainage, legal lot/title/easements, Certificate of Occupancy / existing legal use, historic/design review, and financial feasibility.",
   );
 
   return steps;

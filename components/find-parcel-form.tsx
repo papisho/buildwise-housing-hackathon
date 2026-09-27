@@ -56,60 +56,71 @@ export function FindParcelForm() {
   }, [pending, result]);
 
   return (
-    <section className="mt-8">
-      <form
-        action={formAction}
-        className="flex flex-col gap-3"
-        onSubmit={(event) => {
-          const formData = new FormData(event.currentTarget);
-          submittedAddress.current = String(formData.get("address") ?? "");
-          submittedProjectType.current = parseProposedProjectType(
-            formData.get("proposedProjectType"),
-          );
-        }}
-      >
-        <label htmlFor="address" className="text-sm font-medium">
-          Address
-        </label>
-        <input
-          id="address"
-          name="address"
-          type="text"
-          value={address}
-          onChange={(event) => setAddress(event.target.value)}
-          placeholder="414 Grant Street, Pittsburgh, PA 15219"
-          autoComplete="street-address"
-          required
-          className="border border-neutral-300 px-3 py-2"
-        />
-        <label htmlFor="proposedProjectType" className="text-sm font-medium">
-          Proposed housing
-        </label>
-        <select
-          id="proposedProjectType"
-          name="proposedProjectType"
-          value={proposedProjectType}
-          onChange={(event) =>
-            setProposedProjectType(
-              event.target.value as ProposedProjectType,
-            )
-          }
-          className="border border-neutral-300 bg-white px-3 py-2"
+    <section id="analyze" className="mt-12 scroll-mt-24">
+      <div className="bw-card p-5 sm:p-6">
+        <h2 className="text-xl font-semibold tracking-tight">Analyze a property</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          City of Pittsburgh parcels. Decision support only — not legal, zoning,
+          engineering, environmental, or financial advice.
+        </p>
+        <form
+          action={formAction}
+          className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem_auto] lg:items-end"
+          onSubmit={(event) => {
+            const formData = new FormData(event.currentTarget);
+            submittedAddress.current = String(formData.get("address") ?? "");
+            submittedProjectType.current = parseProposedProjectType(
+              formData.get("proposedProjectType"),
+            );
+          }}
         >
-          {PROPOSED_PROJECT_TYPES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-fit cursor-pointer border border-neutral-900 bg-neutral-900 px-4 py-2 text-sm text-white disabled:cursor-wait disabled:opacity-80"
-        >
-          {pending ? "Analyzing…" : "Analyze Property"}
-        </button>
-      </form>
+          <div>
+            <label htmlFor="address" className="text-sm font-medium">
+              Address
+            </label>
+            <input
+              id="address"
+              name="address"
+              type="text"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              placeholder="414 Grant Street, Pittsburgh, PA 15219"
+              autoComplete="street-address"
+              required
+              className="bw-input mt-1.5"
+            />
+          </div>
+          <div>
+            <label htmlFor="proposedProjectType" className="text-sm font-medium">
+              Proposed housing
+            </label>
+            <select
+              id="proposedProjectType"
+              name="proposedProjectType"
+              value={proposedProjectType}
+              onChange={(event) =>
+                setProposedProjectType(
+                  event.target.value as ProposedProjectType,
+                )
+              }
+              className="bw-input mt-1.5"
+            >
+              {PROPOSED_PROJECT_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={pending}
+            className="bw-btn h-[2.625rem] w-full lg:w-auto"
+          >
+            {pending ? "Analyzing…" : "Analyze Property"}
+          </button>
+        </form>
+      </div>
 
       <LoadingStages pending={pending} />
 

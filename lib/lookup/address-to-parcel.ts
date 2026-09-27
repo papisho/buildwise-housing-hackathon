@@ -7,15 +7,12 @@ import {
   type CensusMatch,
 } from "@/lib/geocoder/census";
 import {
-  findParcelByPoint,
   findParcelEsriGeometryByPin,
   findParcelGeometryByPin,
   type CountyParcel,
 } from "@/lib/parcels/allegheny";
-import {
-  disambiguateParcelsByAssessmentAddress,
-  type ParcelAddressCandidate,
-} from "@/lib/parcels/disambiguate";
+import { type ParcelAddressCandidate } from "@/lib/parcels/disambiguate";
+import { resolveValidatedParcel } from "@/lib/parcels/resolve-identity";
 import {
   findFloodForPin,
   type FloodLookupResult,
@@ -32,6 +29,8 @@ import {
   findUnderminedForPin,
   type UnderminedLookupResult,
 } from "@/lib/hazards/undermined";
+import { lookupRegulatoryRecords } from "@/lib/regulatory";
+import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import {
   parseProposedProjectType,
   type ProposedProjectType,
@@ -45,12 +44,16 @@ import {
   explainAnalysis,
   buildClaudeAnalysisInput,
 } from "@/lib/claude/client";
-import type { ClaudeExplanationResult } from "@/lib/claude/types";
+import type {
+  ClaudeAnalysisInput,
+  ClaudeExplanationResult,
+} from "@/lib/claude/types";
 import {
   evaluateUseCompatibility,
   type UseCompatibilityResult,
 } from "@/lib/zoning/compatibility";
 import {
+  findZoningForParcelEsri,
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
@@ -73,9 +76,11 @@ export type AddressToParcelResult =
       landslide: LandslideLookupResult;
       undermined: UnderminedLookupResult;
       flood: FloodLookupResult;
+      regulatoryRecords: RegulatoryRecordsResult;
       decision: DecisionSnapshot;
       recommendedVerification: string[];
       aiSummary: ClaudeExplanationResult;
+      claudeContext: ClaudeAnalysisInput;
     }
   | {
       status: "invalid_input";
@@ -111,6 +116,13 @@ export type AddressToParcelResult =
       parcels: ParcelAddressCandidate[];
     }
   | {
+      status: "parcel_identity_verification_required";
+      message: string;
+      census: CensusMatch;
+      parcels: ParcelAddressCandidate[];
+      directHitPin: string | null;
+    }
+  | {
       status: "parcel_unavailable";
       message: string;
       census: CensusMatch;
@@ -120,7 +132,14 @@ function isPittsburgh(match: CensusMatch): boolean {
   return match.city.toUpperCase() === "PITTSBURGH";
 }
 
-async function lookupZoningForPin(pin: string): Promise<ZoningLookupResult> {
+async function lookupZoningForPin(
+  pin: string,
+  parcelEsri2272?: Awaited<ReturnType<typeof findParcelEsriGeometryByPin>>,
+): Promise<ZoningLookupResult> {
+  if (parcelEsri2272?.status === "ok") {
+    return findZoningForParcelEsri(parcelEsri2272.geometry);
+  }
+
   const geometry = await findParcelGeometryByPin(pin);
   if (geometry.status === "unavailable") {
     return { status: "unavailable", message: geometry.message };
@@ -135,13 +154,17 @@ async function lookupZoningForPin(pin: string): Promise<ZoningLookupResult> {
   return findZoningForParcelGeometry(geometry.geometry);
 }
 
-async function lookupSiteEvidence(pin: string): Promise<{
+async function lookupSiteEvidence(
+  pin: string,
+  censusMatchedAddress: string,
+): Promise<{
   assessment: AssessmentLookupResult;
   zoning: ZoningLookupResult;
   steepSlope: SteepSlopeLookupResult;
   landslide: LandslideLookupResult;
   undermined: UnderminedLookupResult;
   flood: FloodLookupResult;
+  regulatoryRecords: RegulatoryRecordsResult;
 }> {
   const parcelGeometry = await findParcelEsriGeometryByPin(pin, 2272);
   const geometry =
@@ -150,7 +173,7 @@ async function lookupSiteEvidence(pin: string): Promise<{
   const [assessment, zoning, steepSlope, landslide, undermined, flood] =
     await Promise.all([
       findAssessmentByParid(pin),
-      lookupZoningForPin(pin),
+      lookupZoningForPin(pin, parcelGeometry),
       findSteepSlopeForPin(pin, geometry).catch(
         (): SteepSlopeLookupResult => ({
           status: "not_evaluated",
@@ -177,7 +200,22 @@ async function lookupSiteEvidence(pin: string): Promise<{
       ),
     ]);
 
-  return { assessment, zoning, steepSlope, landslide, undermined, flood };
+  const regulatoryRecords = await lookupRegulatoryRecords({
+    // Canonical County PIN from address-to-parcel; not independently resolved.
+    pin,
+    assessment,
+    censusMatchedAddress,
+  });
+
+  return {
+    assessment,
+    zoning,
+    steepSlope,
+    landslide,
+    undermined,
+    flood,
+    regulatoryRecords,
+  };
 }
 
 export async function findParcelForAddress(
@@ -230,59 +268,48 @@ export async function findParcelForAddress(
     };
   }
 
-  const parcelLookup = await findParcelByPoint(
-    census.longitude,
-    census.latitude,
-  );
+  const identity = await resolveValidatedParcel({
+    longitude: census.longitude,
+    latitude: census.latitude,
+    requestedAddress: address,
+    censusMatchedAddress: census.matchedAddress,
+  });
 
-  if (parcelLookup.status === "unavailable") {
+  if (identity.status === "unavailable") {
     return {
       status: "parcel_unavailable",
-      message: parcelLookup.message,
+      message: identity.message,
       census,
     };
   }
 
-  if (parcelLookup.status === "no_match") {
+  if (identity.status === "no_match") {
     return {
       status: "no_parcel_match",
       message:
-        "The geocoded point did not intersect an Allegheny County parcel. No parcel was selected.",
+        "The geocoded point did not identify an Allegheny County parcel whose assessment address matches the entered address. No parcel was selected.",
       census,
     };
   }
 
-  if (parcelLookup.status === "ambiguous") {
-    const disambiguated = await disambiguateParcelsByAssessmentAddress(
-      parcelLookup.parcels,
-      address,
-      census.matchedAddress,
-    );
-
-    if (disambiguated.status === "ok") {
-      const evidence = await lookupSiteEvidence(disambiguated.parcel.pin);
-      return completeOkResult({
-        request,
-        census,
-        parcel: disambiguated.parcel,
-        evidence,
-      });
-    }
-
+  if (identity.status === "verification_required") {
     return {
-      status: "ambiguous_parcel_match",
-      message:
-        "More than one County parcel intersects this location, and assessment addresses did not identify a single match. A parcel was not selected.",
+      status: "parcel_identity_verification_required",
+      message: identity.message,
       census,
-      parcels: disambiguated.candidates,
+      parcels: identity.candidates,
+      directHitPin: identity.directHitPin,
     };
   }
 
-  const evidence = await lookupSiteEvidence(parcelLookup.parcel.pin);
+  const evidence = await lookupSiteEvidence(
+    identity.parcel.pin,
+    census.matchedAddress,
+  );
   return completeOkResult({
     request,
     census,
-    parcel: parcelLookup.parcel,
+    parcel: identity.parcel,
     evidence,
   });
 }
@@ -298,6 +325,7 @@ async function completeOkResult(input: {
     landslide: LandslideLookupResult;
     undermined: UnderminedLookupResult;
     flood: FloodLookupResult;
+    regulatoryRecords: RegulatoryRecordsResult;
   };
 }): Promise<Extract<AddressToParcelResult, { status: "ok" }>> {
   const useCompatibility = evaluateUseCompatibility({
@@ -307,28 +335,30 @@ async function completeOkResult(input: {
   const decision = buildDecisionSnapshot({
     ...input.evidence,
     useCompatibility,
+    regulatoryRecords: input.evidence.regulatoryRecords,
   });
   const recommendedVerification = buildRecommendedVerification({
     ...input.evidence,
     useCompatibility,
     decision,
+    regulatoryRecords: input.evidence.regulatoryRecords,
   });
-  const aiSummary = await explainAnalysis(
-    buildClaudeAnalysisInput({
-      address: input.census.matchedAddress,
-      parcelId: input.parcel.pin,
-      proposedProjectType: input.request.proposedProjectType,
-      assessment: input.evidence.assessment,
-      zoning: input.evidence.zoning,
-      useCompatibility,
-      steepSlope: input.evidence.steepSlope,
-      landslide: input.evidence.landslide,
-      undermined: input.evidence.undermined,
-      flood: input.evidence.flood,
-      decision,
-      recommendedVerification,
-    }),
-  );
+  const claudeContext = buildClaudeAnalysisInput({
+    address: input.census.matchedAddress,
+    parcelId: input.parcel.pin,
+    proposedProjectType: input.request.proposedProjectType,
+    assessment: input.evidence.assessment,
+    zoning: input.evidence.zoning,
+    useCompatibility,
+    steepSlope: input.evidence.steepSlope,
+    landslide: input.evidence.landslide,
+    undermined: input.evidence.undermined,
+    flood: input.evidence.flood,
+    decision,
+    recommendedVerification,
+    regulatoryRecords: input.evidence.regulatoryRecords,
+  });
+  const aiSummary = await explainAnalysis(claudeContext);
 
   return {
     status: "ok",
@@ -340,5 +370,6 @@ async function completeOkResult(input: {
     decision,
     recommendedVerification,
     aiSummary,
+    claudeContext,
   };
 }

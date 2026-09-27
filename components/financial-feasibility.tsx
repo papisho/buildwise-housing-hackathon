@@ -1,28 +1,33 @@
 export function FinancialFeasibilityNotAssessed() {
   return (
-    <section className="mt-6 border border-dashed border-neutral-400 bg-neutral-50 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-neutral-600">
+    <section className="bw-card mt-6 border-dashed bg-paper p-5">
+      <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
         Future due diligence · informational only
       </p>
-      <h2 className="mt-1 text-lg font-medium">
-        Financial Feasibility — Not Assessed
-      </h2>
-      <p className="mt-2 text-sm">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-semibold">
+          Financial Feasibility — Not Assessed
+        </h2>
+        <span className="inline-flex items-center rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-medium text-ink-muted">
+          Not Evaluated
+        </span>
+      </div>
+      <p className="mt-2 text-sm leading-6">
         This BuildWise MVP evaluates zoning and mapped site constraints. It does
         not determine whether a project will financially “pencil,” and it does
         not calculate ROI, IRR, profit, project value, or financial
         feasibility.
       </p>
-      <h3 className="mt-4 text-sm font-medium">
+      <h3 className="mt-4 text-sm font-semibold">
         Future free public-data inputs (not used in this analysis)
       </h3>
-      <ul className="mt-2 list-disc pl-5 text-sm">
+      <ul className="mt-2 list-disc pl-5 text-sm leading-6">
         <li>
           Allegheny County Property Sale Transactions — validated nearby sale
           comps (filter validation codes; recorded price is not automatically
           market value).{" "}
           <a
-            className="underline"
+            className="text-accent underline"
             href="https://data.wprdc.org/dataset/allegheny-county-property-sale-transactions"
           >
             WPRDC sales
@@ -32,7 +37,7 @@ export function FinancialFeasibilityNotAssessed() {
           HUD Fair Market Rents / Small Area FMRs — rent benchmarks, not asking
           or contract rents.{" "}
           <a
-            className="underline"
+            className="text-accent underline"
             href="https://www.huduser.gov/portal/datasets/fmr.html"
           >
             HUD FMR
@@ -41,7 +46,7 @@ export function FinancialFeasibilityNotAssessed() {
         <li>
           BLS Producer Price Index — construction-cost escalation context only,
           not Pittsburgh bid levels.{" "}
-          <a className="underline" href="https://www.bls.gov/ppi/data.htm">
+          <a className="text-accent underline" href="https://www.bls.gov/ppi/data.htm">
             BLS PPI
           </a>
         </li>
@@ -50,10 +55,10 @@ export function FinancialFeasibilityNotAssessed() {
           market value or an acquisition price.
         </li>
       </ul>
-      <h3 className="mt-4 text-sm font-medium">
+      <h3 className="mt-4 text-sm font-semibold">
         Still requires developer / project-specific input
       </h3>
-      <ul className="mt-2 list-disc pl-5 text-sm">
+      <ul className="mt-2 list-disc pl-5 text-sm leading-6">
         <li>owner willingness to sell</li>
         <li>site control</li>
         <li>asking / land acquisition price</li>

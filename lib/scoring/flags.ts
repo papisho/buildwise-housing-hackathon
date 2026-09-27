@@ -2,7 +2,9 @@ import type { FloodLookupResult } from "@/lib/hazards/flood";
 import type { LandslideLookupResult } from "@/lib/hazards/landslide";
 import type { SteepSlopeLookupResult } from "@/lib/hazards/steep-slope";
 import type { UnderminedLookupResult } from "@/lib/hazards/undermined";
+import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import type { UseCompatibilityResult } from "@/lib/zoning/compatibility";
+import type { ZoningLookupResult } from "@/lib/zoning/pittsburgh";
 import { FLAG_OVERLAP_THRESHOLD_PERCENT } from "@/lib/scoring/config";
 
 export type CriticalFlagType =
@@ -10,7 +12,10 @@ export type CriticalFlagType =
   | "LANDSLIDE_REVIEW"
   | "MINE_UNDERMINED_REVIEW"
   | "FLOOD_REVIEW"
-  | "ZONING_USE_REVIEW";
+  | "ZONING_USE_REVIEW"
+  | "SPLIT_ZONING_REVIEW"
+  | "OPEN_PERMIT_REVIEW"
+  | "VIOLATION_REVIEW";
 
 export type CriticalFlag = {
   type: CriticalFlagType;
@@ -43,11 +48,13 @@ function shouldFlagIntersection(
 }
 
 export function buildCriticalFlags(input: {
+  zoning?: ZoningLookupResult;
   steepSlope: SteepSlopeLookupResult;
   landslide: LandslideLookupResult;
   undermined: UnderminedLookupResult;
   flood: FloodLookupResult;
   useCompatibility?: UseCompatibilityResult;
+  regulatoryRecords?: RegulatoryRecordsResult;
 }): CriticalFlag[] {
   const flags: CriticalFlag[] = [];
   const zoning = input.useCompatibility;
@@ -65,6 +72,33 @@ export function buildCriticalFlags(input: {
         "This is a first-pass encoding of the published use table. It is not a determination that a use is permitted, approved, or prohibited as an entitlement.",
       verificationAction:
         "Verify the proposed use against Pittsburgh Zoning Code § 911.02, any cited use standards, overlays, and City Planning / Zoning Administrator interpretation.",
+      overlapPercent: null,
+    });
+  }
+
+  if (input.zoning?.status === "ok" && input.zoning.splitZoning) {
+    const percents = input.zoning.districts
+      .map((district) => {
+        const area =
+          district.intersectionAreaSqFt !== null
+            ? `${Math.round(district.intersectionAreaSqFt).toLocaleString("en-US")} sq ft`
+            : "area not calculated";
+        const pct =
+          district.intersectionPercent !== null
+            ? `${district.intersectionPercent.toFixed(1)}%`
+            : "percent not calculated";
+        return `${district.code} (${pct}; ${area})`;
+      })
+      .join("; ");
+    flags.push({
+      type: "SPLIT_ZONING_REVIEW",
+      level: "REVIEW",
+      title: "Split zoning",
+      finding: `Multiple mapped zoning districts intersect this parcel: ${percents}. A controlling district was not selected.`,
+      whyItMatters:
+        "Which district applies depends on the proposed development envelope. This is not a determination of the controlling zoning district.",
+      verificationAction:
+        "Verify with City Planning which district(s) apply to the proposed building area.",
       overlapPercent: null,
     });
   }
@@ -155,6 +189,54 @@ export function buildCriticalFlags(input: {
         overlapPercent: overlap,
       });
     }
+  }
+
+  const regulatory = input.regulatoryRecords;
+  if (regulatory && regulatory.unresolvedPermitCount > 0) {
+    const examples = (
+      regulatory.permits.status === "ok" ? regulatory.permits.records : []
+    )
+      .filter((record) => record.reviewClass === "UNRESOLVED")
+      .slice(0, 3)
+      .map((record) => `${record.permitId} (${record.status ?? "status not reported"})`)
+      .join("; ");
+    flags.push({
+      type: "OPEN_PERMIT_REVIEW",
+      level: "REVIEW",
+      title: "Open permit review",
+      finding: `${regulatory.unresolvedPermitCount} permit record(s) have a clearly in-process official status in the queried PLI Permits feed${examples ? `: ${examples}` : "."}`,
+      whyItMatters:
+        "An in-process permit status is screening evidence that existing applications or work may still be under City review. It is not a determination that work is illegal, approved, or that a new housing use is entitled.",
+      verificationAction:
+        "Verify unresolved permit status with Pittsburgh permitting staff / OneStopPGH before relying on this screening.",
+      overlapPercent: null,
+    });
+  }
+
+  if (regulatory && regulatory.unresolvedViolationCount > 0) {
+    const examples = (
+      regulatory.violations.status === "ok"
+        ? regulatory.violations.records
+        : []
+    )
+      .filter((record) => record.reviewClass === "UNRESOLVED")
+      .slice(0, 3)
+      .map(
+        (record) =>
+          `${record.casefileNumber} (${record.status ?? "status not reported"})`,
+      )
+      .join("; ");
+    flags.push({
+      type: "VIOLATION_REVIEW",
+      level: "REVIEW",
+      title: "Violation review",
+      finding: `${regulatory.unresolvedViolationCount} violation casefile(s) have a clearly unresolved official status in the queried PLI/DOMI/ES violations feed${examples ? `: ${examples}` : "."}`,
+      whyItMatters:
+        "An unresolved violation casefile is screening evidence of an open regulatory record. It is not a determination of legal liability, site condition, or that a proposed housing use is prohibited.",
+      verificationAction:
+        "Verify unresolved violations with the issuing department before relying on this screening.",
+      overlapPercent: null,
+    });
   }
 
   return flags;

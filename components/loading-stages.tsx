@@ -36,9 +36,9 @@ export function LoadingStages({ pending }: { pending: boolean }) {
   }
 
   return (
-    <div className="mt-6 border border-neutral-300 p-4" role="status">
-      <p className="text-sm font-medium">{LOADING_STAGES[index]}</p>
-      <ol className="mt-3 space-y-1 text-sm text-neutral-600">
+    <div className="bw-card mt-6 p-5" role="status">
+      <p className="text-sm font-semibold">{LOADING_STAGES[index]}</p>
+      <ol className="mt-3 space-y-1 text-sm text-ink-muted">
         {LOADING_STAGES.map((stage, stageIndex) => (
           <li key={stage}>
             {stageIndex < index ? "Done — " : stageIndex === index ? "Now — " : ""}
@@ -46,7 +46,7 @@ export function LoadingStages({ pending }: { pending: boolean }) {
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-sm text-neutral-500">
+      <p className="mt-3 text-sm text-ink-muted">
         These stages follow the live lookup. A full analysis can take about 30
         seconds.
       </p>

@@ -3,6 +3,10 @@ const PARCEL_QUERY_URL =
 const REQUEST_TIMEOUT_MS = 15_000;
 const STREET_CENTERLINE_SEARCH_FEET = 20;
 
+/** Bounded search for address validation when the Census point hits the wrong lot. */
+export const ADDRESS_VALIDATION_SEARCH_FEET = 200;
+const NEARBY_PARCEL_RECORD_CAP = 80;
+
 export type CountyParcel = {
   pin: string;
   mapBlockLot: string | null;
@@ -89,11 +93,14 @@ function selectNormalParcels(candidates: CountyParcel[]): CountyParcel[] {
   return [...unique.values()];
 }
 
-async function queryParcelsAtPoint(
+async function loadParcelsAtPoint(
   longitude: number,
   latitude: number,
   searchDistanceFeet?: number,
-): Promise<ParcelLookupResult> {
+): Promise<
+  | { status: "ok"; parcels: CountyParcel[] }
+  | { status: "unavailable"; message: string }
+> {
   const geometry = JSON.stringify({
     x: longitude,
     y: latitude,
@@ -109,8 +116,8 @@ async function queryParcelsAtPoint(
   url.searchParams.set("returnGeometry", "false");
   url.searchParams.set("outSR", "4326");
   url.searchParams.set("f", "json");
-
   if (searchDistanceFeet !== undefined) {
+    url.searchParams.set("resultRecordCount", String(NEARBY_PARCEL_RECORD_CAP));
     url.searchParams.set("distance", String(searchDistanceFeet));
     url.searchParams.set("units", "esriSRUnit_Foot");
   }
@@ -143,21 +150,14 @@ async function queryParcelsAtPoint(
       };
     }
 
-    const parcels = selectNormalParcels(
-      (payload.features ?? [])
-        .map(parseParcel)
-        .filter((parcel): parcel is CountyParcel => parcel !== null),
-    );
-
-    if (parcels.length === 0) {
-      return { status: "no_match" };
-    }
-
-    if (parcels.length > 1) {
-      return { status: "ambiguous", parcels };
-    }
-
-    return { status: "ok", parcel: parcels[0] };
+    return {
+      status: "ok",
+      parcels: selectNormalParcels(
+        (payload.features ?? [])
+          .map(parseParcel)
+          .filter((parcel): parcel is CountyParcel => parcel !== null),
+      ),
+    };
   } catch (error) {
     const aborted =
       error instanceof Error &&
@@ -172,6 +172,28 @@ async function queryParcelsAtPoint(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function queryParcelsAtPoint(
+  longitude: number,
+  latitude: number,
+  searchDistanceFeet?: number,
+): Promise<ParcelLookupResult> {
+  const loaded = await loadParcelsAtPoint(
+    longitude,
+    latitude,
+    searchDistanceFeet,
+  );
+  if (loaded.status === "unavailable") {
+    return loaded;
+  }
+  if (loaded.parcels.length === 0) {
+    return { status: "no_match" };
+  }
+  if (loaded.parcels.length > 1) {
+    return { status: "ambiguous", parcels: loaded.parcels };
+  }
+  return { status: "ok", parcel: loaded.parcels[0] };
 }
 
 export async function findParcelByPoint(
@@ -191,6 +213,17 @@ export async function findParcelByPoint(
     latitude,
     STREET_CENTERLINE_SEARCH_FEET,
   );
+}
+
+export async function findParcelsNearPoint(
+  longitude: number,
+  latitude: number,
+  searchDistanceFeet: number = ADDRESS_VALIDATION_SEARCH_FEET,
+): Promise<
+  | { status: "ok"; parcels: CountyParcel[] }
+  | { status: "unavailable"; message: string }
+> {
+  return loadParcelsAtPoint(longitude, latitude, searchDistanceFeet);
 }
 
 type GeoJsonFeatureCollection = {
