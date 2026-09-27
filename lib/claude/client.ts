@@ -101,7 +101,6 @@ export async function explainAnalysis(
       body: JSON.stringify({
         model: readClaudeModel(),
         max_tokens: 1200,
-        temperature: 0,
         system: CLAUDE_SYSTEM_PROMPT,
         messages: [
           {
