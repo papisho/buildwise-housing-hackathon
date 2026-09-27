@@ -166,6 +166,8 @@ async function querySlopePolygons(
 export async function findSteepSlopeForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /** Display-only copy of the intersecting rings; never used for scoring. */
+  collectDisplayGeometry?: (rings: number[][][]) => void,
 ): Promise<SteepSlopeLookupResult> {
   try {
     const parcel = parcelGeometry
@@ -182,6 +184,8 @@ export async function findSteepSlopeForPin(
     if (slope.status === "unavailable") {
       return { status: "not_evaluated", message: "Steep slope: Not Evaluated" };
     }
+
+    collectDisplayGeometry?.(slope.rings);
 
     const source = await slopeSource();
     const intersects = slope.rings.length > 0;

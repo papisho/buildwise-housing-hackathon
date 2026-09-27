@@ -38,6 +38,11 @@ function siteSource(
 export async function findHistoricSitesForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /**
+   * Display-only copy of the rings that survived the geometry-noise filter and
+   * the canonical-PIN lotblock override.
+   */
+  collectDisplayGeometry?: (name: string, rings: number[][][]) => void,
 ): Promise<HistoricSiteLookupResult> {
   const retrievedAt = new Date().toISOString();
   const vintage = await readWprdcVintage(HISTORIC_SITES_RESOURCE_ID);
@@ -87,6 +92,7 @@ export async function findHistoricSitesForPin(
         return [];
       }
       survivingRings.push(...rings);
+      collectDisplayGeometry?.(name, rings);
       return [
         {
           name,

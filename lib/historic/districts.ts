@@ -40,6 +40,11 @@ function districtSource(
 export async function findHistoricDistrictsForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /**
+   * Display-only copy of the rings that survived the geometry-noise filter.
+   * Ignored slivers are never handed over, so they cannot be drawn as a hit.
+   */
+  collectDisplayGeometry?: (name: string, rings: number[][][]) => void,
 ): Promise<HistoricDistrictLookupResult> {
   const retrievedAt = new Date().toISOString();
   const vintage = await readWprdcVintage(HISTORIC_DISTRICTS_RESOURCE_ID);
@@ -83,6 +88,7 @@ export async function findHistoricDistrictsForPin(
         return [];
       }
       survivingRings.push(...rings);
+      collectDisplayGeometry?.(name, rings);
       return [
         {
           name,

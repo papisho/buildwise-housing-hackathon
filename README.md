@@ -2,28 +2,60 @@
 
 BuildWise is a preliminary decision-support tool for **small and mid-sized housing developers** doing first-pass Pittsburgh site screening.
 
-## Hackathon
+Enter a City of Pittsburgh address and a proposed housing type. BuildWise resolves one validated parcel, screens mapped public evidence, and returns a Development Ease snapshot, coverage, review flags, and a grounded explanation. It does not issue a permit, a zoning determination, or a financial opinion.
+
+Click a topic heading to hide or show that section.
+
+<details open>
+<summary><h2>Hackathon</h2></summary>
 
 - **Event:** AI Horizons 2026 AI for Housing Hackathon
 - **Track:** Track 1 — Development Feasibility Navigator
 - **Scope:** City of Pittsburgh preliminary decision-support only
 
-## Disclaimer
+</details>
+
+<details open>
+<summary><h2>Disclaimer</h2></summary>
 
 This tool is **not** legal, zoning, engineering, environmental, or financial advice. Mapped GIS districts and hazard layers are factual evidence only. They do not mean a site is permitted, approved, buildable, or unbuildable. If zoning is disputed, the official zoning code and maps maintained by the Zoning Administrator prevail.
 
-## Current working flow
+Missing data is **Not Evaluated**. A source failure is never treated as a clear or favorable finding.
 
-1. Enter a Pittsburgh street address.
-2. U.S. Census Geocoder matches the address to coordinates.
-3. Allegheny County parcel polygons are queried from that point (with a 20-foot search when the point falls in the street). Special GIS PINs such as `COMMON GROUND` are ignored. If several valid PINs remain, assessment addresses are compared to the requested address; a parcel is selected only when exactly one matches.
-4. Allegheny County Property Assessments are loaded by PARID.
-5. City of Pittsburgh base zoning is intersected with the **parcel polygon**, not the Census point. Multiple districts are listed as split zoning.
-6. City of Pittsburgh mapped ≥25% slope is intersected with the same parcel polygon. Overlap percent is calculated in EPSG:2272 when the clip succeeds.
-7. City of Pittsburgh landslide-prone areas, City undermined areas, and flood hazard (FEMA NFHL first; City/WPRDC 2014 FEMA extract if NFHL is unreachable) are intersected independently with the same parcel polygon.
-8. A **Scoring v0.1 — Provisional** snapshot is computed in `lib/scoring/` from currently implemented evidence. It is not the SME-validated model.
+</details>
 
-## Data sources currently used
+<details open>
+<summary><h2>Demo</h2></summary>
+
+Placeholder. Replace the lines below with the live app and a short walkthrough before submission.
+
+- **Live app:** _not linked yet_
+- **Walkthrough video:** _not linked yet_
+
+</details>
+
+<details open>
+<summary><h2>Current working flow</h2></summary>
+
+1. Enter a Pittsburgh street address and a proposed housing type (general screening, single-unit detached, single-unit attached, two-unit, three-unit, or multi-unit 4+).
+2. The U.S. Census Geocoder matches the address to coordinates. An ambiguous Census match stops the lookup. No nearby parcel is chosen silently.
+3. Allegheny County parcel polygons are queried from that point (with a 20-foot search when the point falls in the street). Special GIS PINs such as `COMMON GROUND` are ignored. Assessment addresses are compared to the requested address. A parcel is selected only when exactly one match is validated. Otherwise the result is `PARCEL_IDENTITY_VERIFICATION_REQUIRED` and no score, map, or evidence card is produced.
+4. That canonical PARID is the identity for every later step. Nothing downstream geocodes again or picks a different parcel.
+5. Allegheny County Property Assessments are loaded by PARID.
+6. City of Pittsburgh base zoning is intersected with the parcel polygon in EPSG:2272. Every intersecting district is kept, including split zoning. A first-pass use table reports how the proposed housing type sits in those districts. That status is an encoding of the published table, not a Zoning Administrator determination.
+7. Steep slope (≥25%), landslide-prone area, undermined/mine area, and flood hazard are intersected independently with the same parcel polygon. Flood tries FEMA NFHL first, then the City/WPRDC 2014 FEMA extract, then a labeled secondary fallback.
+8. PLI permits and PLI/DOMI/ES violations are looked up for the canonical PIN. Unresolved records raise review context. A source failure stays Not Evaluated.
+9. City historic districts and individually designated historic sites are screened with the same parcel. Overlaps under 1% are ignored as geometry noise unless the site lotblock matches the canonical PIN.
+10. Scoring v1 (`lib/scoring/`) computes the Development Ease Score, Evidence Coverage, and Critical Review Flags from the structured evidence. Unevaluated evidence is left unscored. Flags stay visible even when the numeric score is high or incomplete.
+11. Deterministic verification steps are listed from the evidence and flags.
+12. Claude writes a short explanation from the completed structured result, and a parcel-grounded chat can answer follow-up questions. If Claude is unavailable, the structured result still renders.
+13. Preliminary Financial Context adds nearby County-coded valid sales and a HUD Fair Market Rent benchmark. It does not change the score, coverage, or flags, and it is not an appraisal.
+14. A Parcel & Evidence Map draws the validated parcel plus the zoning, hazard, and historic geometry already used in the analysis. The map is display-only. It does not create findings or change any score.
+
+</details>
+
+<details open>
+<summary><h2>Data sources currently used</h2></summary>
 
 - U.S. Census Geocoder (`locations/onelineaddress`, `benchmark=Public_AR_Current`)
 - Allegheny County parcels ArcGIS layer: `OPENDATA/Parcels/MapServer/0`
@@ -33,26 +65,38 @@ This tool is **not** legal, zoning, engineering, environmental, or financial adv
 - City of Pittsburgh / WPRDC Landslide-Prone Areas (`PGHWebLandslideProne/FeatureServer/0`; GeoJSON resource `b5b45ac6-f8ef-4805-b4e4-fc7c63fb4075`)
 - City of Pittsburgh / WPRDC Undermined Areas (`PGHWebUndermined/FeatureServer/0`; GeoJSON resource `e1d96015-818f-46fb-88dd-85c20eacb96c`)
 - FEMA National Flood Hazard Layer, Flood Hazard Zones (`public/NFHL/MapServer/28`) — authoritative primary source. If that host is unreachable, City of Pittsburgh / WPRDC 2014 FEMA Flood Zones (`PGHWebFEMA2014/FeatureServer/0`; GeoJSON resource `122717f9-f08a-4be1-82b9-c213cc069e8c`), a City-published extract of official FEMA data. Esri Living Atlas USA Flood Hazard Reduced Set is a secondary fallback only and is not presented as direct FEMA evidence.
+- City of Pittsburgh / WPRDC PLI Permits
+- City of Pittsburgh / WPRDC PLI/DOMI/ES Violations
+- City of Pittsburgh / WPRDC City Designated Historic Districts (`PGHWebCHDHistoricDistricts/FeatureServer/0`)
+- City of Pittsburgh / WPRDC City Designated Individual Historic Sites (`PGHWEBCHDIndividialProperties/FeatureServer/0`)
+- Allegheny County / WPRDC Property Sale Transactions
+- HUD Fair Market Rents / Small Area FMRs (Pittsburgh metro, `METRO38300M38300`)
+- OpenStreetMap tiles for the evidence map basemap only. The basemap is geographic context, not a BuildWise evidence source.
 - Official zoning references: [Zoning Code](https://ecode360.com/45474054), [City zoning map](https://pittsburghpa.maps.arcgis.com/apps/instant/sidebar/index.html?appid=4bb79ea64bf848b3a0560e3856efeccb), [City zoning page](https://www.pittsburghpa.gov/Business-Development/City-Planning/Zoning)
 
-## Current limitations
+</details>
+
+<details open>
+<summary><h2>Current limitations</h2></summary>
 
 - City of Pittsburgh parcels only.
-- Census interpolates to the street centerline; some addresses stay ambiguous when several nearby parcels match.
-- Assessment house numbers can differ from the entered address when one parcel covers a range of numbers.
-- Base zoning is the mapped district only. Use permission (permitted / conditional / special exception) is not evaluated.
-- Steep slope is the City ≥25% slope GIS layer. Landslide, mine/undermined, and flood use their own sources and fail independently.
-- Overlap percent is a planar GIS calculation in Pennsylvania State Plane South (US survey feet). It is not a field survey.
-- Source or API failure for zoning or a hazard layer is shown as not evaluated. Missing data is not treated as a clean or favorable site.
-- Development Ease Score is Scoring Version 0.1 — Provisional. It currently uses only steep-slope overlap. Zoning-use compatibility is not scored. Mapped landslide, mine, and flood conditions can raise review flags. A high score does not hide a Critical Flag.
-- No SQLite cache and no AI narrative on the result.
+- Census interpolates to the street centerline. Some addresses stay unresolved when several nearby parcels match, and analysis stops instead of guessing.
+- Assessment house numbers can differ from the entered address when one parcel covers a range of numbers. Screening stays attached to the PARID.
+- The use table is a first-pass encoding for the supported housing types. It is not a legal entitlement, and general screening does not apply a use status.
+- Overlap percent is a planar GIS calculation in Pennsylvania State Plane South (US survey feet, EPSG:2272). It is not a field survey. The map reprojects a copy to latitude/longitude for display only.
+- Historic overlaps under 1% are dropped as a BuildWise geometry-noise rule, not an official Historic Review Commission threshold. A site whose lotblock equals the canonical PIN still counts.
+- Source or API failure is shown as Not Evaluated. Missing data is not treated as a clean or favorable site.
+- Scoring v1 uses SME-informed heuristic weights. It is not an established industry standard. The score is incomplete when a scored evidence layer was not evaluated. A high score does not hide a Critical Review Flag.
+- Regulatory records, historic screening, and financial context inform review and narrative. They are not extra score inputs.
+- Nearby sales are County-coded valid sales near the parcel. They are not determined comparables, and the HUD rent figure is a benchmark, not project rent.
+- The map shows only the subject parcel and evidence that already intersected it. It is not a survey, and a failed layer is Not Evaluated rather than drawn as clear.
+- Not in this build: dimensional standards, other overlays, legal access, utilities, stormwater, title and easements, certificate of occupancy, and a full financial feasibility model.
+- No SQLite cache. Each analysis calls the live public services.
 
-## AI / tools used so far
+</details>
 
-- ChatGPT — research, planning, and project-document handoff
-- Cursor — implementation in this repository
-
-## Getting started
+<details open>
+<summary><h2>Getting started</h2></summary>
 
 ```bash
 npm install
@@ -61,9 +105,31 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Stack
+Optional, in `.env.local` (do not commit this file):
 
-- Next.js (App Router)
-- TypeScript
+- `CLAUDE_API_KEY` — grounded explanation and parcel chat. Without it, the structured result still renders and the AI summary is unavailable.
+- `CLAUDE_MODEL` — optional. Defaults to `claude-sonnet-4-5`.
+- `HUD_USER_API_TOKEN` — HUD rent benchmark. Without it, that benchmark is Not Evaluated. Nearby sales do not depend on this token.
+
+</details>
+
+<details open>
+<summary><h2>Stack</h2></summary>
+
+- Next.js (App Router) and TypeScript
 - Tailwind CSS
+- Leaflet and OpenStreetMap for the evidence map
+- proj4 for display-only reprojection from EPSG:2272 to EPSG:4326
+- Claude API for the grounded explanation and follow-up chat
 - npm
+
+</details>
+
+<details open>
+<summary><h2>AI / tools used so far</h2></summary>
+
+- ChatGPT — research, planning, and project-document handoff
+- Cursor — implementation in this repository
+- Claude API — runtime explanation only. It does not change facts, flags, score, or coverage.
+
+</details>

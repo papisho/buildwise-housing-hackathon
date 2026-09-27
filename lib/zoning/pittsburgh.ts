@@ -109,6 +109,7 @@ function parseDistrictAttributes(
 function districtsFromFeatures(
   features: ArcGisFeature[],
   parcelRings2272?: number[][][],
+  collectDisplayGeometry?: (code: string, rings: number[][][]) => void,
 ): ZoningDistrict[] {
   const grouped = new Map<
     string,
@@ -138,6 +139,7 @@ function districtsFromFeatures(
       : 0;
 
   return [...grouped.values()].map(({ district, rings }) => {
+    collectDisplayGeometry?.(district.code, rings);
     if (!parcelRings2272 || rings.length === 0 || parcelArea <= 0) {
       return {
         ...district,
@@ -298,6 +300,8 @@ function finishZoningResult(
 
 export async function findZoningForParcelEsri(
   geometry: EsriPolygon,
+  /** Display-only copy of each district's rings; never used for scoring. */
+  collectDisplayGeometry?: (code: string, rings: number[][][]) => void,
 ): Promise<ZoningLookupResult> {
   const source = await zoningSource();
   const queried = await queryZoningFeatures({
@@ -311,7 +315,11 @@ export async function findZoningForParcelEsri(
   }
   return finishZoningResult(
     source,
-    districtsFromFeatures(queried.features, geometry.rings),
+    districtsFromFeatures(
+      queried.features,
+      geometry.rings,
+      collectDisplayGeometry,
+    ),
   );
 }
 

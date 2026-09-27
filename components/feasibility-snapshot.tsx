@@ -22,6 +22,7 @@ import type {
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 import type { ClaudeExplanationResult } from "@/lib/claude/types";
 import { FinancialContextWithChat } from "@/components/financial-feasibility";
+import { ParcelEvidenceMap } from "@/components/parcel-evidence-map";
 import { StatusBadge } from "@/components/status-badge";
 
 type OkResult = Extract<AddressToParcelResult, { status: "ok" }>;
@@ -92,6 +93,7 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
 
       <SnapshotMetrics decision={result.decision} />
       <CoverageWarning coveragePercent={result.decision.coverage.percent} />
+      <ParcelEvidenceMap data={result.evidenceMap} />
       <ZoningEntitlement
         zoning={result.zoning}
         useCompatibility={result.useCompatibility}

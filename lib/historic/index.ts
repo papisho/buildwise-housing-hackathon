@@ -14,9 +14,16 @@ import type { EsriPolygon } from "@/lib/hazards/arcgis";
 export async function lookupHistoricDesignation(input: {
   pin: string;
   geometry?: EsriPolygon;
+  /** Display-only geometry collectors; they do not affect screening status. */
+  collectDistrictGeometry?: (name: string, rings: number[][][]) => void;
+  collectSiteGeometry?: (name: string, rings: number[][][]) => void;
 }): Promise<HistoricDesignationResult> {
   const [districts, sites] = await Promise.all([
-    findHistoricDistrictsForPin(input.pin, input.geometry).catch(
+    findHistoricDistrictsForPin(
+      input.pin,
+      input.geometry,
+      input.collectDistrictGeometry,
+    ).catch(
       (): Awaited<ReturnType<typeof findHistoricDistrictsForPin>> => ({
         status: "not_evaluated",
         message: "Historic districts: Not Evaluated",
@@ -33,7 +40,11 @@ export async function lookupHistoricDesignation(input: {
         },
       }),
     ),
-    findHistoricSitesForPin(input.pin, input.geometry).catch(
+    findHistoricSitesForPin(
+      input.pin,
+      input.geometry,
+      input.collectSiteGeometry,
+    ).catch(
       (): Awaited<ReturnType<typeof findHistoricSitesForPin>> => ({
         status: "not_evaluated",
         message: "Individual historic sites: Not Evaluated",

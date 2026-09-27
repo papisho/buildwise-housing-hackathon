@@ -59,6 +59,9 @@ import {
   findZoningForParcelGeometry,
   type ZoningLookupResult,
 } from "@/lib/zoning/pittsburgh";
+import { buildEvidenceMap } from "@/lib/map/build";
+import { createDisplayGeometrySink } from "@/lib/map/types";
+import type { EvidenceMapData } from "@/lib/map/types";
 import { composeFinancialContext } from "@/lib/financial";
 import type { FinancialContextResult } from "@/lib/financial";
 import { findNearbyValidatedSales } from "@/lib/financial/sales";
@@ -85,6 +88,8 @@ export type AddressToParcelResult =
       regulatoryRecords: RegulatoryRecordsResult;
       historicDesignation: HistoricDesignationResult;
       financialContext: FinancialContextResult;
+      /** Display-only. Null when the map cannot be built; never a finding. */
+      evidenceMap: EvidenceMapData | null;
       decision: DecisionSnapshot;
       recommendedVerification: string[];
       aiSummary: ClaudeExplanationResult;
@@ -143,9 +148,13 @@ function isPittsburgh(match: CensusMatch): boolean {
 async function lookupZoningForPin(
   pin: string,
   parcelEsri2272?: Awaited<ReturnType<typeof findParcelEsriGeometryByPin>>,
+  collectDisplayGeometry?: (code: string, rings: number[][][]) => void,
 ): Promise<ZoningLookupResult> {
   if (parcelEsri2272?.status === "ok") {
-    return findZoningForParcelEsri(parcelEsri2272.geometry);
+    return findZoningForParcelEsri(
+      parcelEsri2272.geometry,
+      collectDisplayGeometry,
+    );
   }
 
   const geometry = await findParcelGeometryByPin(pin);
@@ -175,10 +184,14 @@ async function lookupSiteEvidence(
   regulatoryRecords: RegulatoryRecordsResult;
   historicDesignation: HistoricDesignationResult;
   financialContext: FinancialContextResult;
+  evidenceMap: EvidenceMapData | null;
 }> {
   const parcelGeometry = await findParcelEsriGeometryByPin(pin, 2272);
   const geometry =
     parcelGeometry.status === "ok" ? parcelGeometry.geometry : undefined;
+  // Display-only geometry captured from the evidence queries below. It is
+  // consumed by the map builder and never reaches scoring or Claude.
+  const displayGeometry = createDisplayGeometrySink();
 
   const salesPromise = findNearbyValidatedSales({ pin, geometry }).catch(
     (): Awaited<ReturnType<typeof findNearbyValidatedSales>> => ({
@@ -198,32 +211,51 @@ async function lookupSiteEvidence(
   const [assessment, zoning, steepSlope, landslide, undermined, flood, historicDesignation] =
     await Promise.all([
       findAssessmentByParid(pin),
-      lookupZoningForPin(pin, parcelGeometry),
-      findSteepSlopeForPin(pin, geometry).catch(
+      lookupZoningForPin(pin, parcelGeometry, (code, rings) => {
+        displayGeometry.zoning.push({ code, rings });
+      }),
+      findSteepSlopeForPin(pin, geometry, (rings) => {
+        displayGeometry.steepSlope = rings;
+      }).catch(
         (): SteepSlopeLookupResult => ({
           status: "not_evaluated",
           message: "Steep slope: Not Evaluated",
         }),
       ),
-      findLandslideForPin(pin, geometry).catch(
+      findLandslideForPin(pin, geometry, (rings) => {
+        displayGeometry.landslide = rings;
+      }).catch(
         (): LandslideLookupResult => ({
           status: "not_evaluated",
           message: "Landslide: Not Evaluated",
         }),
       ),
-      findUnderminedForPin(pin, geometry).catch(
+      findUnderminedForPin(pin, geometry, (rings) => {
+        displayGeometry.undermined = rings;
+      }).catch(
         (): UnderminedLookupResult => ({
           status: "not_evaluated",
           message: "Mine / undermined: Not Evaluated",
         }),
       ),
-      findFloodForPin(pin, geometry).catch(
+      findFloodForPin(pin, geometry, (rings) => {
+        displayGeometry.flood = rings;
+      }).catch(
         (): FloodLookupResult => ({
           status: "not_evaluated",
           message: "Flood: Not Evaluated",
         }),
       ),
-      lookupHistoricDesignation({ pin, geometry }).catch(
+      lookupHistoricDesignation({
+        pin,
+        geometry,
+        collectDistrictGeometry: (name, rings) => {
+          displayGeometry.historicDistricts.push({ name, rings });
+        },
+        collectSiteGeometry: (name, rings) => {
+          displayGeometry.historicSites.push({ name, rings });
+        },
+      }).catch(
         (): HistoricDesignationResult => ({
           overallStatus: "HISTORIC_STATUS_NOT_EVALUATED",
           overallStatusLabel: "Historic status not evaluated",
@@ -301,6 +333,33 @@ async function lookupSiteEvidence(
 
   const financialContext = composeFinancialContext({ pin, sales, hud });
 
+  // Visualization only. A failure here must never change the analysis, so the
+  // map payload degrades to null and the result renders without it.
+  let evidenceMap: EvidenceMapData | null = null;
+  if (geometry) {
+    try {
+      evidenceMap = buildEvidenceMap({
+        pin,
+        parcelRings2272: geometry.rings,
+        assessmentAddress:
+          assessment.status === "ok"
+            ? assessment.facts.propertyAddress
+            : null,
+        lotAreaSqFt:
+          assessment.status === "ok" ? assessment.facts.lotArea : null,
+        zoning,
+        steepSlope,
+        landslide,
+        undermined,
+        flood,
+        historicDesignation,
+        geometry: displayGeometry,
+      });
+    } catch {
+      evidenceMap = null;
+    }
+  }
+
   return {
     assessment,
     zoning,
@@ -311,6 +370,7 @@ async function lookupSiteEvidence(
     regulatoryRecords,
     historicDesignation,
     financialContext,
+    evidenceMap,
   };
 }
 
@@ -424,9 +484,12 @@ async function completeOkResult(input: {
     regulatoryRecords: RegulatoryRecordsResult;
     historicDesignation: HistoricDesignationResult;
     financialContext: FinancialContextResult;
+    evidenceMap: EvidenceMapData | null;
   };
 }): Promise<Extract<AddressToParcelResult, { status: "ok" }>> {
-  const { financialContext, ...scoredEvidence } = input.evidence;
+  // `evidenceMap` is split out here so map geometry cannot reach the scoring
+  // engine, coverage, flags or the Claude payload.
+  const { financialContext, evidenceMap, ...scoredEvidence } = input.evidence;
   const useCompatibility = evaluateUseCompatibility({
     proposedProjectType: input.request.proposedProjectType,
     zoning: input.evidence.zoning,
@@ -469,7 +532,9 @@ async function completeOkResult(input: {
     request: input.request,
     census: input.census,
     parcel: input.parcel,
-    ...input.evidence,
+    ...scoredEvidence,
+    financialContext,
+    evidenceMap,
     useCompatibility,
     decision,
     recommendedVerification,

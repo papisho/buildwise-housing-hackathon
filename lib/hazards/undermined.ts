@@ -65,6 +65,8 @@ async function underminedSource(): Promise<HazardSource> {
 export async function findUnderminedForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /** Display-only copy of the intersecting rings; never used for scoring. */
+  collectDisplayGeometry?: (rings: number[][][]) => void,
 ): Promise<UnderminedLookupResult> {
   try {
     const parcel = await resolveParcelPolygon(pin, parcelGeometry);
@@ -88,6 +90,7 @@ export async function findUnderminedForPin(
     }
 
     const rings = ringsFromFeatures(query.features);
+    collectDisplayGeometry?.(rings);
     const intersects = rings.length > 0;
     const overlap = overlapFromRings(parcel.geometry.rings, rings);
 

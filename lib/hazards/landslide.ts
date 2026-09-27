@@ -49,6 +49,8 @@ async function landslideSource(): Promise<HazardSource> {
 export async function findLandslideForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /** Display-only copy of the intersecting rings; never used for scoring. */
+  collectDisplayGeometry?: (rings: number[][][]) => void,
 ): Promise<LandslideLookupResult> {
   try {
     const parcel = await resolveParcelPolygon(pin, parcelGeometry);
@@ -66,6 +68,7 @@ export async function findLandslideForPin(
     }
 
     const rings = ringsFromFeatures(query.features);
+    collectDisplayGeometry?.(rings);
     const intersects = rings.length > 0;
     const overlap = overlapFromRings(parcel.geometry.rings, rings);
 

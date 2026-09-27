@@ -186,6 +186,8 @@ async function queryFloodEndpoint(
 export async function findFloodForPin(
   pin: string,
   parcelGeometry?: EsriPolygon,
+  /** Display-only copy of the hazard rings; never used for scoring. */
+  collectDisplayGeometry?: (rings: number[][][]) => void,
 ): Promise<FloodLookupResult> {
   try {
     const parcel = await resolveParcelPolygon(pin, parcelGeometry);
@@ -212,6 +214,7 @@ export async function findFloodForPin(
     );
     const zones = uniqueZones(hazardFeatures.map(zoneFromFeature));
     const rings = ringsFromFeatures(hazardFeatures);
+    collectDisplayGeometry?.(rings);
     const intersects = rings.length > 0;
     const overlap = overlapFromRings(parcel.geometry.rings, rings);
 
