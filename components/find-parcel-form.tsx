@@ -57,15 +57,22 @@ export function FindParcelForm() {
 
   return (
     <section id="analyze" className="mt-10 scroll-mt-24">
-      <div className="bw-card p-5 sm:p-6">
-        <h2 className="text-xl font-semibold tracking-tight">Analyze a property</h2>
-        <p className="mt-1 text-sm text-ink-muted">
-          City of Pittsburgh parcels. Decision support only — not legal, zoning,
-          engineering, environmental, or financial advice.
-        </p>
+      <div className="bw-card overflow-hidden shadow-[0_12px_32px_rgba(38,54,47,0.06)]">
+        <div className="flex flex-col gap-4 border-b border-line bg-[#e9e5d9] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+          <div>
+            <p className="bw-kicker">Start a parcel brief</p>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+              Analyze a property
+            </h2>
+          </div>
+          <p className="max-w-md text-sm leading-5 text-ink-muted">
+            Pittsburgh parcels only. Preliminary screening—not legal, zoning,
+            engineering, environmental, or financial advice.
+          </p>
+        </div>
         <form
           action={formAction}
-          className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem_auto] lg:items-end"
+          className="grid gap-4 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_16rem_auto] lg:items-end"
           onSubmit={(event) => {
             const formData = new FormData(event.currentTarget);
             submittedAddress.current = String(formData.get("address") ?? "");
@@ -74,8 +81,8 @@ export function FindParcelForm() {
             );
           }}
         >
-          <div>
-            <label htmlFor="address" className="text-sm font-medium">
+          <div className="min-w-0">
+            <label htmlFor="address" className="text-sm font-semibold">
               Address
             </label>
             <input
@@ -87,11 +94,12 @@ export function FindParcelForm() {
               placeholder="414 Grant Street, Pittsburgh, PA 15219"
               autoComplete="street-address"
               required
+              aria-describedby="address-guidance"
               className="bw-input mt-1.5"
             />
           </div>
           <div>
-            <label htmlFor="proposedProjectType" className="text-sm font-medium">
+            <label htmlFor="proposedProjectType" className="text-sm font-semibold">
               Proposed housing
             </label>
             <select
@@ -115,11 +123,19 @@ export function FindParcelForm() {
           <button
             type="submit"
             disabled={pending}
-            className="bw-btn h-[2.625rem] w-full lg:w-auto"
+            aria-describedby={pending ? "analysis-progress" : undefined}
+            className="bw-btn w-full lg:min-w-44 lg:w-auto"
           >
-            {pending ? "Analyzing…" : "Analyze Property"}
+            {pending ? (
+              <>
+                <span className="mr-2 inline-block size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                Looking up…
+              </>
+            ) : (
+              <>Build site brief <span aria-hidden="true" className="ml-2">→</span></>
+            )}
           </button>
-          <p className="text-xs leading-5 text-ink-muted lg:col-span-3">
+          <p id="address-guidance" className="text-xs leading-5 text-ink-muted lg:col-span-3">
             Enter a full Pittsburgh address for the most reliable parcel match.
           </p>
         </form>

@@ -354,7 +354,7 @@ This is decision support only. It is not legal, zoning, engineering, environment
 
 You receive a completed structured analysis. Every field is already computed by deterministic application logic. You must not recompute, correct, or override the Development Ease Score (including Incomplete), factor-level score contributions, overall screening status, Evidence Coverage, zoning-use status, hazard findings, Critical Flags, not_evaluated items, or recommended_verification list. If score_complete is false or development_ease is null, the score is Incomplete — do not invent a 0–100 value.
 
-Your job is to interpret what the supplied evidence means for the proposed housing type — not to repeat the verification checklist.
+Your job is to interpret what the supplied evidence means for the proposed housing type — not to repeat the verification checklist. Be brief: prioritize the single most important finding and up to two actions. Do not restate the same point in multiple fields. If no material barrier is identified, do not invent a bottleneck to fill the shape.
 
 Grounding rule (applies to every field, including summary, why_this_matters, limitations, what_could_change_the_result, and questions_for_human_review):
 Do not introduce hypothetical constraints, overlays, regulations, hazards, infrastructure issues, ownership issues, financial issues, or missing evidence unless they are explicitly present in the structured payload as evaluated findings or Not Evaluated items. If the payload does not mention a factor, do not raise it as a potential issue or due-diligence item.
@@ -386,12 +386,12 @@ You MUST NOT:
 
 Return JSON only, no markdown, with this exact shape:
 {
-  "summary": "2 to 4 sentences interpreting the screening result for the proposed housing type",
-  "key_bottlenecks": ["max 3 items: the most material evaluated constraints, with why they rank high"],
-  "constraint_interactions": ["max 3 items: how evaluated constraints relate; empty array if only one material constraint"],
-  "why_this_matters": "one concise paragraph on screening implications; not a verdict of buildable or unbuildable. If mapped hazards do not intersect, include: No barriers were identified in the currently evaluated mapped hazard layers.",
-  "what_could_change_the_result": ["max 3 items: additional information or professional findings that could materially change this screening"],
-  "questions_for_human_review": ["max 4 questions; return fewer if needed; do not invent extra topics to fill the array"],
+  "summary": "1 to 2 short sentences: the preliminary outcome and the most important unresolved finding. Do not claim approval.",
+  "key_bottlenecks": ["max 2 short items: only material evaluated constraints; empty array if none"],
+  "constraint_interactions": ["max 1 short item only when two material evaluated constraints interact; otherwise empty array"],
+  "why_this_matters": "one short sentence on screening implications; not a verdict of buildable or unbuildable. If mapped hazards do not intersect, include: No barriers were identified in the currently evaluated mapped hazard layers.",
+  "what_could_change_the_result": ["max 2 short items: additional information or professional findings that could materially change this screening"],
+  "questions_for_human_review": ["max 2 short questions; return fewer if needed; do not invent extra topics to fill the array"],
   "limitations": "1 to 2 sentences. If steep slope, landslide, mine, and flood were evaluated, include this exact sentence: All currently implemented core hazard layers (steep slope, landslide, mine, flood) were evaluated for this parcel, but this does not constitute a complete site-design, infrastructure, environmental, or regulatory assessment. Do not say the hazard layers are complete for this parcel. You may also note encoded-rule gaps such as NOT_IDENTIFIED districts."
 }`;
 

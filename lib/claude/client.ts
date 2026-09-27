@@ -11,13 +11,14 @@ import type {
 
 export const CLAUDE_MODEL = "claude-sonnet-4-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const REQUEST_TIMEOUT_MS = 35_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 const UNAVAILABLE_MESSAGE =
   "AI explanation unavailable. Structured evidence and recommended verification remain available.";
 
 type AnthropicResponse = {
   content?: Array<{ type?: string; text?: string }>;
   error?: { message?: string };
+  stop_reason?: string;
 };
 
 function readApiKey(): string | null {
@@ -82,6 +83,7 @@ export async function explainAnalysis(
 ): Promise<ClaudeExplanationResult> {
   const apiKey = readApiKey();
   if (!apiKey) {
+    console.warn("BuildWise AI summary unavailable: CLAUDE_API_KEY is not configured.");
     return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
   }
 
@@ -100,7 +102,7 @@ export async function explainAnalysis(
       },
       body: JSON.stringify({
         model: readClaudeModel(),
-        max_tokens: 2000,
+        max_tokens: 2800,
         thinking: { type: "disabled" },
         system: CLAUDE_SYSTEM_PROMPT,
         messages: [
@@ -113,16 +115,22 @@ export async function explainAnalysis(
     });
 
     if (!response.ok) {
+      console.warn(`BuildWise AI summary unavailable: provider returned HTTP ${response.status}.`);
       return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
     }
 
     const body = (await response.json()) as AnthropicResponse;
+    if (body.stop_reason === "max_tokens") {
+      console.warn("BuildWise AI summary unavailable: response exceeded the token limit.");
+      return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
+    }
     const text = body.content
       ?.filter((block) => block.type === "text" && typeof block.text === "string")
       .map((block) => block.text ?? "")
       .join("\n")
       .trim();
     if (!text) {
+      console.warn("BuildWise AI summary unavailable: provider returned no text.");
       return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
     }
 
@@ -130,7 +138,11 @@ export async function explainAnalysis(
       status: "ok",
       narrative: parseNarrative(extractJsonObject(text)),
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      "BuildWise AI summary unavailable:",
+      error instanceof Error ? error.name : "unknown error",
+    );
     return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
   } finally {
     clearTimeout(timer);

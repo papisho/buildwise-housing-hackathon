@@ -20,10 +20,14 @@ import type {
   UseTableStatus,
 } from "@/lib/zoning/compatibility";
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
-import type { ClaudeExplanationResult } from "@/lib/claude/types";
+import { AiBrief } from "@/components/ai-brief";
 import { FinancialContextWithChat } from "@/components/financial-feasibility";
 import { ParcelEvidenceMap } from "@/components/parcel-evidence-map";
-import { ResultJumpNav, SourceDisclosure } from "@/components/result-chrome";
+import {
+  ResultJumpNav,
+  SourceDisclosure,
+  SourcesAssumptionsDisclosure,
+} from "@/components/result-chrome";
 import { StatusBadge } from "@/components/status-badge";
 
 type OkResult = Extract<AddressToParcelResult, { status: "ok" }>;
@@ -57,37 +61,48 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
 
   return (
     <div id="results" className="mt-8 scroll-mt-24">
-      <p className="text-xs font-medium tracking-wide text-accent uppercase">
-        Development Feasibility Snapshot
-      </p>
-      {showMatchedLabel ? (
-        <p className="mt-2 text-sm font-medium text-ink">
-          Matched property address
+      <header className="relative overflow-hidden rounded-2xl border border-[#c7d3c7] bg-[#e8eee7] px-5 py-6 sm:px-8 sm:py-8">
+        <div className="pointer-events-none absolute -right-12 -top-14 size-56 rounded-full border border-accent/10 sm:size-72" aria-hidden="true" />
+        <div className="pointer-events-none absolute -right-4 -top-6 size-40 rounded-full border border-accent/10 sm:size-56" aria-hidden="true" />
+        <div className="relative flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#a9c0ac] bg-[#f7faf4] px-2.5 py-1 text-xs font-semibold text-accent">
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5 fill-none stroke-current" strokeWidth="2">
+              <path d="m3.2 8.2 3 3 6.6-6.6" />
+            </svg>
+            Lookup complete
+          </span>
+          <span className="font-mono text-[11px] tracking-wide text-ink-muted">
+            PARCEL BRIEF / {result.parcel.pin}
+          </span>
+        </div>
+        {showMatchedLabel ? (
+          <p className="relative mt-4 text-sm font-medium text-ink-muted">
+            Matched property address
+          </p>
+        ) : null}
+        <h2 className="bw-serif relative mt-2 max-w-3xl text-3xl leading-tight sm:text-4xl">
+          {geocodedAddress}
+        </h2>
+        <p className="relative mt-3 text-sm font-medium text-ink-muted">
+          PARID {result.parcel.pin}
+          <span className="mx-2 text-[#98543f]">/</span>
+          Proposed {proposedProjectTypeLabel(result.request.proposedProjectType)}
         </p>
-      ) : null}
-      <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-        {geocodedAddress}
-      </h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        PARID {result.parcel.pin}
-        {" · "}
-        Proposed: {proposedProjectTypeLabel(result.request.proposedProjectType)}
-      </p>
-      {addressesDiffer ? (
-        <p className="mt-2 text-sm text-ink-muted">
-          These address strings are not assumed to be the same. Screening is
-          attached to PARID {result.parcel.pin}, not to the entered house number
-          alone.
-        </p>
-      ) : null}
-      {houseNumberZero ? (
-        <p className="mt-2 text-sm text-ink-muted">
-          County house number is 0 for this PARID. The assessment record is not
-          the entered address.
-        </p>
-      ) : null}
+        {addressesDiffer ? (
+          <p className="relative mt-3 max-w-3xl border-l-2 border-[#98543f] pl-3 text-sm leading-6 text-ink-muted">
+            Address strings differ. Screening is attached to PARID {result.parcel.pin},
+            not to the entered house number alone.
+          </p>
+        ) : null}
+        {houseNumberZero ? (
+          <p className="relative mt-3 max-w-3xl border-l-2 border-[#98543f] pl-3 text-sm leading-6 text-ink-muted">
+            County house number is 0 for this PARID; the assessment record is not
+            the entered address.
+          </p>
+        ) : null}
+      </header>
       <details className="mt-3">
-        <summary className="cursor-pointer text-sm font-medium text-accent">
+        <summary className="inline-flex min-h-9 cursor-pointer items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4">
           Parcel identity details
         </summary>
         <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
@@ -118,6 +133,25 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         </a>
       </p>
 
+      <section aria-labelledby="first-look-heading" className="mt-7">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="bw-kicker">Read these first</p>
+            <h2 id="first-look-heading" className="mt-1 text-xl font-semibold tracking-tight">
+              Zoning &amp; historic review
+            </h2>
+          </div>
+          <p className="max-w-sm text-xs leading-5 text-ink-muted">
+            Mapped evidence only. These are screening findings, not approvals.
+          </p>
+        </div>
+        <FirstLookFindings
+          zoning={result.zoning}
+          useCompatibility={result.useCompatibility}
+          historicDesignation={result.historicDesignation}
+        />
+      </section>
+
       <ResultJumpNav />
 
       <div id="result-snapshot" className="scroll-mt-24">
@@ -138,16 +172,17 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
           Regulatory Fit
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-          Mapped zoning, historic designation, and queried regulatory records.
+          Mapped zoning and historic context, followed by permits and
+          violations joined to the canonical parcel identity.
         </p>
         <ZoningEntitlement
           zoning={result.zoning}
           useCompatibility={result.useCompatibility}
         />
+        <HistoricDesignReview
+          historicDesignation={result.historicDesignation}
+        />
         <div id="result-regulatory" className="scroll-mt-24">
-          <HistoricDesignReview
-            historicDesignation={result.historicDesignation}
-          />
           <RegulatoryContext regulatoryRecords={result.regulatoryRecords} />
         </div>
       </section>
@@ -156,7 +191,8 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         <h2 className="text-xl font-semibold tracking-tight">Physical Site</h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">
           Mapped steep slope, landslide, mine, and flood evidence. A missing
-          layer is not a clear site.
+          layer is not a clear site. No mapped intersection describes the queried
+          layer only; it is not a site investigation or a guarantee of absence.
         </p>
         <PhysicalSite
           steepSlope={result.steepSlope}
@@ -170,7 +206,7 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         financial={result.financialContext}
         claudeContext={result.claudeContext}
         sessionKey={`${result.parcel.pin}:${result.request.proposedProjectType}`}
-        interpretation={<AiExplanation aiSummary={result.aiSummary} />}
+        interpretation={<AiBrief result={result} />}
       />
       <HowScoringWorks decision={result.decision} />
       <SourcesAndAssumptions result={result} />
@@ -185,13 +221,118 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
   );
 }
 
+function FirstLookFindings({
+  zoning,
+  useCompatibility,
+  historicDesignation,
+}: {
+  zoning: ZoningLookupResult;
+  useCompatibility: UseCompatibilityResult;
+  historicDesignation: HistoricDesignationResult;
+}) {
+  const historicBadge =
+    historicDesignation.partialEvidence
+      ? "Partial / Not Evaluated"
+      : historicDesignation.overallStatus === "HISTORIC_STATUS_NOT_EVALUATED"
+        ? "Not Evaluated"
+        : historicDesignation.overallStatus ===
+            "NO_HISTORIC_DESIGNATION_IDENTIFIED"
+          ? "No mapped intersection"
+          : "Review required";
+  const historicTone =
+    historicDesignation.partialEvidence ||
+    (historicDesignation.overallStatus !==
+      "HISTORIC_STATUS_NOT_EVALUATED" &&
+      historicDesignation.overallStatus !==
+        "NO_HISTORIC_DESIGNATION_IDENTIFIED")
+      ? "review"
+      : historicDesignation.overallStatus === "HISTORIC_STATUS_NOT_EVALUATED"
+        ? "neutral"
+        : "accent";
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <article className="bw-card overflow-hidden border-l-4 border-l-accent p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Zoning &amp; base use table</h3>
+          {zoning.status === "ok" ? (
+            <StatusBadge>Mapped</StatusBadge>
+          ) : zoning.status === "no_district" ? (
+            <StatusBadge tone="review">Requires Review</StatusBadge>
+          ) : (
+            <StatusBadge>Not Evaluated</StatusBadge>
+          )}
+        </div>
+        {zoning.status === "ok" ? (
+          <>
+            <p className="mt-3 text-lg font-semibold tracking-tight">
+              {zoning.districts.map((district) => district.code).join(" + ")}
+            </p>
+            <ul className="mt-2 space-y-1 text-sm leading-5 text-ink-muted">
+              {useCompatibility.districts.map((district) => (
+                <li key={district.mappedZoningCode}>
+                  <span className="font-medium text-ink">
+                    {district.mappedZoningCode}
+                  </span>
+                  {" · "}
+                  {formatUseTableStatus(district.status)}
+                </li>
+              ))}
+            </ul>
+            {zoning.splitZoning ? (
+              <p className="mt-2 text-xs leading-5 text-ink-muted">
+                Split zoning: all mapped districts are shown; no controlling
+                district was selected.
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-3 text-sm leading-6 text-ink-muted">
+            {zoning.message}
+          </p>
+        )}
+        <p className="mt-3 border-t border-line pt-2 text-xs leading-5 text-ink-muted">
+          Mapped district and preliminary use-table encoding only—not a permit
+          or entitlement determination.
+        </p>
+      </article>
+
+      <article className="bw-card overflow-hidden border-l-4 border-l-[#98543f] p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Historic / design review</h3>
+          <StatusBadge tone={historicTone === "accent" ? "neutral" : historicTone}>
+            {historicBadge}
+          </StatusBadge>
+        </div>
+        <p className="mt-3 text-lg font-semibold tracking-tight">
+          {historicDesignation.overallStatusLabel}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-ink-muted">
+          {historicDesignation.message}
+        </p>
+        {historicDesignation.partialEvidence ? (
+          <p className="mt-2 text-xs leading-5 text-review">
+            Partial source coverage: {historicDesignation.unevaluatedLayers.join(" and ")}{" "}
+            not evaluated.
+          </p>
+        ) : null}
+        <p className="mt-3 border-t border-line pt-2 text-xs leading-5 text-ink-muted">
+          Queried historic layers only. A mapped non-intersection is not a
+          complete historic review.
+        </p>
+      </article>
+    </div>
+  );
+}
+
 function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
   const { presentation } = decision;
 
   return (
     <>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.15fr_1fr_1fr_1fr]">
         <Metric
+          featured
           label="Development Ease Score"
           value={
             presentation.mode === "incomplete"
@@ -212,7 +353,7 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
         <Metric
           label="Core Evidence Coverage"
           value={`${decision.coverage.percent}%`}
-          detail={`${decision.coverage.label}. Implemented core evidence only, not a complete feasibility review.`}
+          detail={`${decision.coverage.label}. Coverage measures implemented core evidence, not feasibility completeness.`}
         />
         <Metric
           label="Critical Review Flags"
@@ -251,16 +392,30 @@ function Metric({
   label,
   value,
   detail,
+  featured = false,
 }: {
   label: string;
   value: string;
   detail: string;
+  featured?: boolean;
 }) {
   return (
-    <div className="bw-card p-4">
-      <p className="text-sm text-ink-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-      <p className="mt-2 text-sm leading-6">{detail}</p>
+    <div
+      className={`bw-card p-4 sm:p-5 ${
+        featured
+          ? "bw-card--featured shadow-[0_8px_22px_rgba(40,86,75,0.12)]"
+          : ""
+      }`}
+    >
+      <p className={`text-sm ${featured ? "text-[#dbe6dc]" : "text-ink-muted"}`}>
+        {label}
+      </p>
+      <p className={`mt-1 text-2xl font-semibold tracking-tight ${featured ? "sm:text-3xl" : ""}`}>
+        {value}
+      </p>
+      <p className={`mt-2 text-sm leading-6 ${featured ? "text-[#e2ebe2]" : ""}`}>
+        {detail}
+      </p>
     </div>
   );
 }
@@ -529,6 +684,10 @@ function EnvironmentalConditions({ flood }: { flood: FloodLookupResult }) {
   return (
     <section className="bw-card mt-6 p-5">
       <h3 className="text-lg font-semibold">Environmental Conditions</h3>
+      <p className="mt-1 text-sm leading-5 text-ink-muted">
+        Mapped flood-layer evidence only. No mapped intersection is not a
+        guarantee of no flood exposure.
+      </p>
       <FloodBlock flood={flood} />
     </section>
   );
@@ -1189,85 +1348,11 @@ function RecommendedVerification({ steps }: { steps: string[] }) {
   );
 }
 
-function AiExplanation({
-  aiSummary,
-}: {
-  aiSummary: ClaudeExplanationResult;
-}) {
-  if (aiSummary.status !== "ok") {
-    return (
-      <section className="bw-card mt-6 p-5">
-        <h3 className="text-lg font-semibold">AI Feasibility Summary</h3>
-        <p className="mt-2 text-sm leading-6">{aiSummary.message}</p>
-      </section>
-    );
-  }
-
-  const { narrative } = aiSummary;
-
-  return (
-      <section className="bw-card mt-6 p-5">
-      <h3 className="text-lg font-semibold">AI Feasibility Summary</h3>
-      <p className="mt-2 text-sm leading-6">{narrative.summary}</p>
-      <NarrativeList
-        title="Key Bottlenecks"
-        items={narrative.key_bottlenecks}
-        empty="No evaluated bottlenecks were listed."
-      />
-      <NarrativeList
-        title="Constraint Interactions"
-        items={narrative.constraint_interactions}
-        empty="No interaction among evaluated constraints was described."
-      />
-      <h4 className="mt-4 text-sm font-semibold">Why This Matters</h4>
-      <p className="mt-2 text-sm">{narrative.why_this_matters}</p>
-      <NarrativeList
-        title="What Could Change the Result"
-        items={narrative.what_could_change_the_result}
-        empty="No additional information items were listed."
-      />
-      <NarrativeList
-        title="Questions for Human Review"
-        items={narrative.questions_for_human_review}
-        empty="No review questions were listed."
-      />
-      <h4 className="mt-4 text-sm font-semibold">Limitations</h4>
-      <p className="mt-2 text-sm">{narrative.limitations}</p>
-    </section>
-  );
-}
-
-function NarrativeList({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: string[];
-  empty: string;
-}) {
-  return (
-    <>
-      <h4 className="mt-4 text-sm font-semibold">{title}</h4>
-      {items.length === 0 ? (
-        <p className="mt-2 text-sm">{empty}</p>
-      ) : (
-        <ul className="mt-2 list-disc pl-5 text-sm">
-          {items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
-
 function SourcesAndAssumptions({ result }: { result: OkResult }) {
   const rows = buildSourceRows(result);
 
   return (
-    <section id="results-sources" className="bw-card mt-10 scroll-mt-24 p-5">
-      <h2 className="text-lg font-semibold">Sources & Assumptions</h2>
+    <SourcesAssumptionsDisclosure>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
           <thead>
@@ -1300,7 +1385,7 @@ function SourcesAndAssumptions({ result }: { result: OkResult }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </SourcesAssumptionsDisclosure>
   );
 }
 
@@ -1413,17 +1498,25 @@ export function LookupError({ result }: { result: AddressToParcelResult }) {
   const title = errorTitle(result.status);
 
   return (
-    <div className="bw-card mt-6 border-alert/30 bg-alert-soft p-5" role="alert">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-2 text-sm">{result.message}</p>
+    <div className="bw-card mt-5 border-alert/30 bg-alert-soft p-5 sm:p-6" role="alert" aria-labelledby="lookup-error-heading">
+      <div className="flex gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-alert/25 bg-[#fbf4ef] font-semibold text-alert" aria-hidden="true">
+          !
+        </span>
+        <div className="min-w-0">
+          <p className="bw-kicker">Lookup needs attention</p>
+          <h2 id="lookup-error-heading" className="mt-1 text-lg font-semibold">{title}</h2>
+          <p className="mt-2 text-sm leading-6">{result.message}</p>
+        </div>
+      </div>
       {"census" in result ? (
-        <p className="mt-2 text-sm text-ink-muted">
+        <p className="mt-3 pl-12 text-sm text-ink-muted">
           Census match: {result.census.matchedAddress} (
           {result.census.latitude}, {result.census.longitude})
         </p>
       ) : null}
       {result.status === "ambiguous_census_match" ? (
-        <ul className="mt-2 list-disc pl-5 text-sm">
+        <ul className="mt-3 list-disc pl-16 text-sm">
           {result.matches.map((match) => (
             <li key={`${match.matchedAddress}-${match.longitude}-${match.latitude}`}>
               {match.matchedAddress}
@@ -1433,7 +1526,7 @@ export function LookupError({ result }: { result: AddressToParcelResult }) {
       ) : null}
       {result.status === "ambiguous_parcel_match" ||
       result.status === "parcel_identity_verification_required" ? (
-        <ul className="mt-2 list-disc pl-5 text-sm">
+        <ul className="mt-3 list-disc pl-16 text-sm">
           {result.parcels.map((parcel) => (
             <li key={parcel.pin}>
               PIN {parcel.pin}
@@ -1446,6 +1539,9 @@ export function LookupError({ result }: { result: AddressToParcelResult }) {
           ))}
         </ul>
       ) : null}
+      <p className="mt-4 pl-12 text-sm text-ink-muted">
+        Review the address and housing type above, then submit again when ready.
+      </p>
     </div>
   );
 }
