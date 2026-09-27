@@ -6,8 +6,8 @@ import {
   baseZoningFamily,
   housingUseFromProjectType,
   HOUSING_USE_LABELS,
-  useTableCell,
-  useTableStandards,
+  lookupUseTableCell,
+  lookupUseTableStandards,
   type EncodedHousingUse,
 } from "@/lib/zoning/use-table";
 
@@ -145,7 +145,7 @@ function evaluateDistrict(
     };
   }
 
-  const tableSymbol = useTableCell(use, family);
+  const tableSymbol = lookupUseTableCell(use, family);
   const mapped = statusFromSymbol(tableSymbol);
   return {
     mappedZoningCode,
@@ -179,7 +179,7 @@ export function evaluateUseCompatibility(input: {
   }
 
   const proposedUseLabel = HOUSING_USE_LABELS[use];
-  const standardsCitation = useTableStandards(use);
+  const standardsCitation = lookupUseTableStandards(use);
 
   if (input.zoning.status === "unavailable" || input.zoning.status === "no_district") {
     return {

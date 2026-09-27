@@ -326,7 +326,7 @@ function ZoningEntitlement({
   );
 }
 
-function useStatusLabel(status: UseTableStatus): string {
+function formatUseTableStatus(status: UseTableStatus): string {
   switch (status) {
     case "PERMITTED_BY_RIGHT":
       return "PERMITTED_BY_RIGHT (P)";
@@ -408,7 +408,7 @@ function UseCompatibilityBlock({
               </dt>
               <dd className="flex flex-wrap items-center gap-2">
                 <UseTableStatusBadge status={district.status} />
-                <span>{useStatusLabel(district.status)}</span>
+                <span>{formatUseTableStatus(district.status)}</span>
               </dd>
               {district.conditionNote ? (
                 <>

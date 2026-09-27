@@ -453,7 +453,7 @@ export function FinancialContextWithChat({
         financial={financial}
         onScenarioChange={setScenario}
       />
-      <AskBuildWiseAI context={context} sessionKey={sessionKey} />
+      <AskBuildWiseAI key={sessionKey} context={context} sessionKey={sessionKey} />
     </>
   );
 }

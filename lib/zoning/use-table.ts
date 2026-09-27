@@ -115,13 +115,13 @@ export function baseZoningFamily(
   return match[1].toUpperCase() as ResidentialBaseFamily;
 }
 
-export function useTableCell(
+export function lookupUseTableCell(
   use: EncodedHousingUse,
   family: ResidentialBaseFamily,
 ): string {
   return USE_TABLE[use][family];
 }
 
-export function useTableStandards(use: EncodedHousingUse): string | null {
+export function lookupUseTableStandards(use: EncodedHousingUse): string | null {
   return USE_STANDARDS[use];
 }

@@ -14,14 +14,17 @@ export const LOADING_STAGES = [
 const STAGE_MS = 4_500;
 
 export function LoadingStages({ pending }: { pending: boolean }) {
+  if (!pending) {
+    return null;
+  }
+
+  return <ActiveLoadingStages />;
+}
+
+function ActiveLoadingStages() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    if (!pending) {
-      setIndex(0);
-      return;
-    }
-
     const timer = window.setInterval(() => {
       setIndex((current) =>
         Math.min(current + 1, LOADING_STAGES.length - 1),
@@ -29,11 +32,7 @@ export function LoadingStages({ pending }: { pending: boolean }) {
     }, STAGE_MS);
 
     return () => window.clearInterval(timer);
-  }, [pending]);
-
-  if (!pending) {
-    return null;
-  }
+  }, []);
 
   return (
     <div className="bw-card mt-6 p-5" role="status">

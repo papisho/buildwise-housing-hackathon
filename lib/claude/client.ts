@@ -1,4 +1,4 @@
-import { readClaudeApiKey } from "@/lib/claude/env";
+import { readClaudeApiKey, readClaudeModel } from "@/lib/claude/env";
 import {
   CLAUDE_SYSTEM_PROMPT,
   buildClaudeAnalysisInput,
@@ -99,7 +99,7 @@ export async function explainAnalysis(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
+        model: readClaudeModel(),
         max_tokens: 1200,
         temperature: 0,
         system: CLAUDE_SYSTEM_PROMPT,
