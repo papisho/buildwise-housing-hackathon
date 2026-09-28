@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { findParcelAction } from "@/app/find-parcel-action";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import {
   FeasibilitySnapshot,
   LookupError,
@@ -81,23 +82,7 @@ export function FindParcelForm() {
             );
           }}
         >
-          <div className="min-w-0">
-            <label htmlFor="address" className="text-sm font-semibold">
-              Address
-            </label>
-            <input
-              id="address"
-              name="address"
-              type="text"
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              placeholder="414 Grant Street, Pittsburgh, PA 15219"
-              autoComplete="street-address"
-              required
-              aria-describedby="address-guidance"
-              className="bw-input mt-1.5"
-            />
-          </div>
+          <AddressAutocomplete address={address} onChange={setAddress} pending={pending} />
           <div>
             <label htmlFor="proposedProjectType" className="text-sm font-semibold">
               Proposed housing
@@ -136,7 +121,7 @@ export function FindParcelForm() {
             )}
           </button>
           <p id="address-guidance" className="text-xs leading-5 text-ink-muted lg:col-span-3">
-            Enter a full Pittsburgh address for the most reliable parcel match.
+            Start typing a street number and name, then choose a Pittsburgh address. You can also enter the full address yourself. Suggestions do not verify a parcel.
           </p>
         </form>
       </div>
