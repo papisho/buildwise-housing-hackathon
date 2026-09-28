@@ -88,6 +88,10 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
           <span className="mx-2 text-[#98543f]">/</span>
           Proposed {proposedProjectTypeLabel(result.request.proposedProjectType)}
         </p>
+        <p className="relative mt-2 max-w-3xl text-sm leading-6 text-ink-muted">
+          We matched your address to County parcel ID (PARID) {result.parcel.pin}.
+          The findings below are tied to this parcel, not to the address text alone.
+        </p>
         {addressesDiffer ? (
           <p className="relative mt-3 max-w-3xl border-l-2 border-[#98543f] pl-3 text-sm leading-6 text-ink-muted">
             Address strings differ. Screening is attached to PARID {result.parcel.pin},
@@ -131,6 +135,13 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         <a href="#result-scoring" className="text-accent underline">
           How scoring works
         </a>
+      </p>
+      <p className="mt-3 text-sm text-ink-muted">
+        Want a quick cost and rent estimate?{" "}
+        <a href="#result-scenario" className="font-semibold text-accent underline">
+          Open the Quick Development Scenario
+        </a>{" "}
+        using your own assumptions. It is not a pro forma.
       </p>
 
       <section aria-labelledby="first-look-heading" className="mt-7">
@@ -295,6 +306,11 @@ function FirstLookFindings({
           Mapped district and preliminary use-table encoding only—not a permit
           or entitlement determination.
         </p>
+        <p className="mt-2 text-xs leading-5 text-ink-muted">
+          Table key: P = permitted by right; A = administrator exception;
+          S = special exception; C = conditional use. A use not identified in
+          our encoded table is <strong>not</strong> a finding that it is prohibited.
+        </p>
       </article>
 
       <article className="bw-card overflow-hidden border-l-4 border-l-[#98543f] p-4 sm:p-5">
@@ -342,7 +358,7 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
           detail={
             presentation.mode === "incomplete"
               ? presentation.caveat
-              : "SME-informed preliminary screening."
+              : "100/100 means no deductions in evaluated factors, not complete feasibility or approval."
           }
         />
         <Metric
@@ -353,7 +369,7 @@ function SnapshotMetrics({ decision }: { decision: DecisionSnapshot }) {
         <Metric
           label="Core Evidence Coverage"
           value={`${decision.coverage.percent}%`}
-          detail={`${decision.coverage.label}. Coverage measures implemented core evidence, not feasibility completeness.`}
+          detail={`${decision.coverage.label}. Even 100% means only the implemented core layers were checked, not that all due diligence is complete.`}
         />
         <Metric
           label="Critical Review Flags"

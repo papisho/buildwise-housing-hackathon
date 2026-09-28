@@ -200,7 +200,7 @@ async function lookupSiteEvidence(
       source: {
         name: "Allegheny County / WPRDC Property Sale Transactions",
         datasetUrl: "https://data.wprdc.org/dataset/real-estate-sales",
-        queryUrl: "https://data.wprdc.org/api/3/action/datastore_search_sql",
+        queryUrl: "https://data.wprdc.org/api/3/action/datastore_search",
         resourceId: "5bbe6c55-bce6-4edb-9d04-68edeb6bf7b1",
         sourceLastModified: null,
         retrievedAt: new Date().toISOString(),

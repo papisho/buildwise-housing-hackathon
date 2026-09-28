@@ -228,9 +228,9 @@ export function PreliminaryFinancialContext({
         </div>
       )}
 
-      <details className="mt-5 rounded-lg border border-line bg-paper p-4">
-        <summary className="cursor-pointer text-sm font-semibold">
-          Quick Development Scenario
+      <details id="result-scenario" className="mt-5 scroll-mt-24 rounded-lg border border-accent/40 bg-paper p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-accent">
+          Quick Development Scenario — use your own cost and rent assumptions
         </summary>
         <p className="mt-3 rounded-md border border-review bg-review-soft px-3 py-2 text-sm font-semibold">
           User-supplied scenario — not validated by BuildWise

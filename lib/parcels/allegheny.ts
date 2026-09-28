@@ -37,6 +37,7 @@ type ArcGisFeature = {
 
 type ArcGisQueryResponse = {
   features?: ArcGisFeature[];
+  exceededTransferLimit?: boolean;
   error?: { message?: string; code?: number };
 };
 
@@ -117,7 +118,8 @@ async function loadParcelsAtPoint(
   url.searchParams.set("outSR", "4326");
   url.searchParams.set("f", "json");
   if (searchDistanceFeet !== undefined) {
-    url.searchParams.set("resultRecordCount", String(NEARBY_PARCEL_RECORD_CAP));
+    // Request one extra so an exact-cap response cannot masquerade as complete.
+    url.searchParams.set("resultRecordCount", String(NEARBY_PARCEL_RECORD_CAP + 1));
     url.searchParams.set("distance", String(searchDistanceFeet));
     url.searchParams.set("units", "esriSRUnit_Foot");
   }
@@ -147,6 +149,16 @@ async function loadParcelsAtPoint(
         message:
           payload.error.message ??
           "Allegheny County parcel service returned an error.",
+      };
+    }
+    if (
+      searchDistanceFeet !== undefined &&
+      (payload.exceededTransferLimit ||
+        (payload.features?.length ?? 0) >= NEARBY_PARCEL_RECORD_CAP)
+    ) {
+      return {
+        status: "unavailable",
+        message: "Nearby parcel search exceeded its result limit; parcel identity cannot be verified.",
       };
     }
 

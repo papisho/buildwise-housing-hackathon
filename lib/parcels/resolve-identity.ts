@@ -73,19 +73,6 @@ export async function resolveValidatedParcel(input: {
     input.requestedAddress,
     input.censusMatchedAddress,
   );
-  const seedMatches = seedAnnotated.filter((candidate) => candidate.addressMatched);
-  if (seedMatches.length === 1) {
-    return { status: "ok", parcel: seedMatches[0] };
-  }
-  if (seedMatches.length > 1) {
-    return {
-      status: "verification_required",
-      message:
-        "PARCEL_IDENTITY_VERIFICATION_REQUIRED. More than one nearby parcel assessment address matches this input. A parcel was not selected.",
-      candidates: seedAnnotated,
-      directHitPin: seedParcels[0]?.pin ?? null,
-    };
-  }
 
   const nearby = await findParcelsNearPoint(
     input.longitude,
@@ -96,7 +83,7 @@ export async function resolveValidatedParcel(input: {
     return {
       status: "verification_required",
       message:
-        "PARCEL_IDENTITY_VERIFICATION_REQUIRED. The Census point parcel assessment address does not match the entered address, and nearby parcels could not be searched. A parcel was not selected.",
+        `PARCEL_IDENTITY_VERIFICATION_REQUIRED. Nearby parcels could not be fully checked (${nearby.message}). A parcel was not selected.`,
       candidates: seedAnnotated,
       directHitPin: seedParcels[0]?.pin ?? null,
     };
@@ -110,6 +97,18 @@ export async function resolveValidatedParcel(input: {
     input.censusMatchedAddress,
   );
   const allCandidates = [...seedAnnotated, ...extraAnnotated];
+
+  // One unavailable assessment may be another address match. Do not select a
+  // different parcel from an incomplete set, even if it appears to be unique.
+  if (allCandidates.some((candidate) => candidate.assessmentAddress === null)) {
+    return {
+      status: "verification_required",
+      message:
+        "PARCEL_IDENTITY_VERIFICATION_REQUIRED. At least one nearby County assessment could not be checked. A parcel was not selected.",
+      candidates: allCandidates,
+      directHitPin: seedParcels[0]?.pin ?? null,
+    };
+  }
 
   const matches = allCandidates.filter((candidate) => candidate.addressMatched);
   if (matches.length === 1) {

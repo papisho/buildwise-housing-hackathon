@@ -24,7 +24,7 @@ const SALES_RESOURCE_ID = "5bbe6c55-bce6-4edb-9d04-68edeb6bf7b1";
 const SALES_DATASET_URL =
   "https://data.wprdc.org/dataset/real-estate-sales";
 const SALES_QUERY_URL =
-  "https://data.wprdc.org/api/3/action/datastore_search_sql";
+  "https://data.wprdc.org/api/3/action/datastore_search";
 const PARCEL_QUERY_URL =
   "https://gisdata.alleghenycounty.us/arcgis/rest/services/OPENDATA/Parcels/MapServer/0/query";
 
@@ -94,7 +94,7 @@ async function queryNeighborParcels(
   url.searchParams.set("outFields", "PIN");
   url.searchParams.set("returnGeometry", "true");
   url.searchParams.set("outSR", "2272");
-  url.searchParams.set("resultRecordCount", String(NEIGHBOR_PIN_CAP));
+  url.searchParams.set("resultRecordCount", String(NEIGHBOR_PIN_CAP + 1));
   url.searchParams.set("f", "json");
 
   const controller = new AbortController();
@@ -114,9 +114,15 @@ async function queryNeighborParcels(
         attributes?: { PIN?: unknown };
         geometry?: { rings?: number[][][] };
       }>;
+      exceededTransferLimit?: boolean;
       error?: { message?: string };
     };
-    if (payload.error) {
+    if (
+      payload.error ||
+      payload.exceededTransferLimit ||
+      !Array.isArray(payload.features) ||
+      payload.features.length >= NEIGHBOR_PIN_CAP
+    ) {
       return null;
     }
     const neighbors: NeighborParcel[] = [];
@@ -172,10 +178,18 @@ async function searchSalesForPin(
     }
     const payload = (await response.json()) as {
       success?: boolean;
-      result?: { records?: Record<string, unknown>[] };
+      result?: { records?: Record<string, unknown>[]; total?: number };
     };
     if (!payload.success || !Array.isArray(payload.result?.records)) {
-      return [];
+      return null;
+    }
+    // CKAN returns at most 50 records per parcel here; a truncated result must
+    // not be reported as a complete nearby-sales search.
+    if (
+      payload.result.total === undefined ||
+      payload.result.total > payload.result.records.length
+    ) {
+      return null;
     }
     return payload.result.records;
   } catch {
@@ -195,15 +209,13 @@ async function queryValidatedSales(
   const since = Date.parse(`${sinceIso}T00:00:00.000Z`);
   const records: Record<string, unknown>[] = [];
   const chunkSize = 8;
-  let anySuccess = false;
   for (let i = 0; i < pins.length; i += chunkSize) {
     const chunk = pins.slice(i, i + chunkSize);
     const parts = await Promise.all(chunk.map((pin) => searchSalesForPin(pin)));
     for (const part of parts) {
       if (part === null) {
-        continue;
+        return null;
       }
-      anySuccess = true;
       for (const row of part) {
         const saleDate = readText(row.SALEDATE);
         if (!saleDate) {
@@ -217,7 +229,7 @@ async function queryValidatedSales(
       }
     }
   }
-  return anySuccess ? records : null;
+  return records;
 }
 
 export async function findNearbyValidatedSales(input: {
@@ -254,7 +266,7 @@ export async function findNearbyValidatedSales(input: {
   if (near === null) {
     return {
       status: "not_evaluated",
-      message: "Nearby sales: Not Evaluated / parcel proximity query failed.",
+      message: "Nearby sales: Not Evaluated / parcel proximity search failed or exceeded its result limit.",
       source,
     };
   }
@@ -270,7 +282,7 @@ export async function findNearbyValidatedSales(input: {
   if (salesRows === null) {
     return {
       status: "not_evaluated",
-      message: "Nearby sales: Not Evaluated / WPRDC sales query failed.",
+      message: "Nearby sales: Not Evaluated / one or more WPRDC sales queries failed or returned incomplete results.",
       source,
     };
   }
@@ -290,7 +302,7 @@ export async function findNearbyValidatedSales(input: {
       return {
         status: "not_evaluated",
         message:
-          "Nearby sales: Not Evaluated / expanded parcel proximity query failed.",
+          "Nearby sales: Not Evaluated / expanded parcel proximity search failed or exceeded its result limit.",
         source,
       };
     }
@@ -303,7 +315,7 @@ export async function findNearbyValidatedSales(input: {
     if (salesRows === null) {
       return {
         status: "not_evaluated",
-        message: "Nearby sales: Not Evaluated / WPRDC sales query failed.",
+        message: "Nearby sales: Not Evaluated / one or more WPRDC sales queries failed or returned incomplete results.",
         source,
       };
     }
