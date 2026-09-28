@@ -27,10 +27,10 @@ Missing data is **Not Evaluated**. A source failure is never treated as a clear 
 <details open>
 <summary><h2>Demo</h2></summary>
 
-Placeholder. Replace the lines below with the live app and a short walkthrough before submission.
+- **Live app:** [Open BuildWise](https://buildwise-amber-alpha.vercel.app/)
+- **Walkthrough video:** [Watch the BuildWise walkthrough](https://youtu.be/mqRCC5VhnUA)
 
-- **Live app:** _not linked yet_
-- **Walkthrough video:** _not linked yet_
+Suggested live sequence: use the **5061 Fifth Ave** scored example with Single-Unit Detached Residential to show a complete score and printable handoff; use the **436 Grant St** General screening example to show an incomplete score and historic review flag; then enter **414 Grant St, Pittsburgh, PA 15219** to show how an ambiguous parcel match stops the analysis instead of guessing. These are screening outcomes, not development approvals.
 
 </details>
 
@@ -47,10 +47,12 @@ Placeholder. Replace the lines below with the live app and a short walkthrough b
 8. PLI permits and PLI/DOMI/ES violations are looked up for the canonical PIN. Unresolved records raise review context. A source failure stays Not Evaluated.
 9. City historic districts and individually designated historic sites are screened with the same parcel. Overlaps under 1% are ignored as geometry noise unless the site lotblock matches the canonical PIN.
 10. Scoring v1 (`lib/scoring/`) computes the Development Ease Score, Evidence Coverage, and Critical Review Flags from the structured evidence. Unevaluated evidence is left unscored. Flags stay visible even when the numeric score is high or incomplete.
-11. Deterministic verification steps are listed from the evidence and flags.
+11. Deterministic verification steps are listed from the evidence and flags. Relevant steps link to the official City zoning map and code or the public OneStopPGH Insights record search. These are starting points for manual verification, not parcel-specific confirmations.
 12. Claude writes a short explanation from the completed structured result, and a parcel-grounded chat can answer follow-up questions. If Claude is unavailable, the structured result still renders.
 13. Preliminary Financial Context adds nearby County-coded valid sales and a HUD Fair Market Rent benchmark. It does not change the score, coverage, or flags, and it is not an appraisal.
 14. A Parcel & Evidence Map draws the validated parcel plus the zoning, hazard, and historic geometry already used in the analysis. The map is display-only. It does not create findings or change any score.
+15. The Quick Development Scenario lets users enter their own cost and rent assumptions for a rough sensitivity check. It is not a pro forma and does not change the Development Ease Score.
+16. A compact parcel handoff previews the matched identity, score or incomplete status, coverage, flags, gaps, recommended checks, and source links. Users can print it or save it as a PDF; it is a summary, not the complete analysis.
 
 </details>
 
@@ -126,10 +128,13 @@ Optional, in `.env.local` (do not commit this file):
 </details>
 
 <details open>
-<summary><h2>AI / tools used so far</h2></summary>
+<summary><h2>AI and development tools disclosure</h2></summary>
 
 - ChatGPT — research, planning, and project-document handoff
-- Cursor — implementation in this repository
-- Claude API — runtime explanation only. It does not change facts, flags, score, or coverage.
+- Cursor — implementation assistance in this repository
+- Replit Agent — AI-assisted implementation, interface iteration, verification, and documentation
+- Anthropic Claude API — optional runtime explanation and parcel-grounded follow-up chat based on structured results. It does not choose parcels or change facts, flags, score, or coverage. The deterministic result still works when the AI explanation is unavailable.
+
+Replit Agent and Cursor are development tools, not runtime evidence sources or zoning authorities. BuildWise's core parcel selection, score, coverage, flags, and verification steps come from the application's code and cited public evidence, not generated text.
 
 </details>
