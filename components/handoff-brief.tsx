@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AddressToParcelResult } from "@/lib/lookup/address-to-parcel";
 import { proposedProjectTypeLabel } from "@/lib/project-type";
+import { VerificationLinks, VerificationPortals } from "@/components/verification-links";
 
 type OkResult = Extract<AddressToParcelResult, { status: "ok" }>;
 
@@ -134,7 +135,10 @@ function HandoffContent({ result }: { result: OkResult }) {
           <h3>Recommended next checks</h3>
           <ol>
             {result.recommendedVerification.slice(0, 4).map((step) => (
-              <li key={step}>{step}</li>
+              <li key={step}>
+                {step}
+                <VerificationLinks step={step} />
+              </li>
             ))}
           </ol>
           {result.recommendedVerification.length > 4 ? (
@@ -144,6 +148,11 @@ function HandoffContent({ result }: { result: OkResult }) {
               not the complete record.
             </p>
           ) : null}
+          <p className="handoff-note">
+            Official verification portals: <VerificationPortals />.
+            Search by address and confirm the parcel and current status; these
+            links do not verify a finding.
+          </p>
         </section>
       </div>
 
