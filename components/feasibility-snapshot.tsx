@@ -23,6 +23,7 @@ import type {
 import type { ZoningLookupResult, ZoningSource } from "@/lib/zoning/pittsburgh";
 import { AiBrief } from "@/components/ai-brief";
 import { FinancialContextWithChat } from "@/components/financial-feasibility";
+import { HandoffBrief } from "@/components/handoff-brief";
 import { ParcelEvidenceMap } from "@/components/parcel-evidence-map";
 import {
   ResultJumpNav,
@@ -177,6 +178,7 @@ export function FeasibilitySnapshot({ result }: { result: OkResult }) {
         <SnapshotMetrics decision={result.decision} />
         <CoverageWarning coveragePercent={result.decision.coverage.percent} />
       </div>
+      <HandoffBrief result={result} />
       <CriticalFlagsCard decision={result.decision} />
       <RecommendedVerification steps={result.recommendedVerification} />
       <div id="result-map" className="scroll-mt-24">
