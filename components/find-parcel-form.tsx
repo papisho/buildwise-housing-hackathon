@@ -24,6 +24,8 @@ export function FindParcelForm() {
     findParcelAction,
     null,
   );
+  const [editedResult, setEditedResult] = useState<typeof result>(null);
+  const resultIsStale = result !== null && editedResult === result;
 
   useEffect(() => {
     if (pending) {
@@ -82,7 +84,14 @@ export function FindParcelForm() {
             );
           }}
         >
-          <AddressAutocomplete address={address} onChange={setAddress} pending={pending} />
+          <AddressAutocomplete
+            address={address}
+            onChange={(value) => {
+              setAddress(value);
+              setEditedResult(result);
+            }}
+            pending={pending}
+          />
           <div>
             <label htmlFor="proposedProjectType" className="text-sm font-semibold">
               Proposed housing
@@ -91,11 +100,11 @@ export function FindParcelForm() {
               id="proposedProjectType"
               name="proposedProjectType"
               value={proposedProjectType}
-              onChange={(event) =>
-                setProposedProjectType(
-                  event.target.value as ProposedProjectType,
-                )
-              }
+              onChange={(event) => {
+                setProposedProjectType(event.target.value as ProposedProjectType);
+                setEditedResult(result);
+              }}
+              disabled={pending}
               className="bw-input mt-1.5"
             >
               {PROPOSED_PROJECT_TYPES.map((option) => (
@@ -123,15 +132,49 @@ export function FindParcelForm() {
           <p id="address-guidance" className="text-xs leading-5 text-ink-muted lg:col-span-3">
             Start typing a street number and name, then choose a Pittsburgh address. You can also enter the full address yourself. Suggestions do not verify a parcel.
           </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs lg:col-span-3">
+            <span className="font-medium text-ink-muted">Try an example:</span>
+            {[
+              {
+                label: "5061 Fifth Ave · scored example",
+                address: "5061 Fifth Ave, Pittsburgh, PA 15232",
+                projectType: "single_unit_detached" as ProposedProjectType,
+              },
+              {
+                label: "436 Grant St · incomplete score",
+                address: "436 Grant St, Pittsburgh, PA 15219",
+                projectType: "general_screening" as ProposedProjectType,
+              },
+            ].map((example) => (
+              <button
+                key={example.address}
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setAddress(example.address);
+                  setProposedProjectType(example.projectType);
+                  setEditedResult(result);
+                }}
+                className="rounded-full border border-line bg-paper px-3 py-1.5 font-medium text-accent hover:border-accent disabled:opacity-50"
+              >
+                {example.label}
+              </button>
+            ))}
+          </div>
         </form>
       </div>
 
       <LoadingStages pending={pending} />
 
-      {!pending && result?.status === "ok" ? (
+      {!pending && resultIsStale && result ? (
+        <p className="mt-5 text-sm text-ink-muted" role="status">
+          Address or housing type changed. Build a new site brief to see updated findings.
+        </p>
+      ) : null}
+      {!pending && !resultIsStale && result?.status === "ok" ? (
         <FeasibilitySnapshot result={result} />
       ) : null}
-      {!pending && result && result.status !== "ok" ? (
+      {!pending && !resultIsStale && result && result.status !== "ok" ? (
         <LookupError result={result} />
       ) : null}
     </section>

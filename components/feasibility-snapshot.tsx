@@ -13,6 +13,7 @@ import { proposedProjectTypeLabel } from "@/lib/project-type";
 import type { HistoricDesignationResult } from "@/lib/historic";
 import type { RegulatoryRecordsResult } from "@/lib/regulatory";
 import { streetLineKey } from "@/lib/regulatory/address";
+import { parseHouseAndStreet } from "@/lib/parcels/match-address";
 import { COVERAGE_THRESHOLDS } from "@/lib/scoring/config";
 import type { DecisionSnapshot } from "@/lib/scoring";
 import type {
@@ -37,7 +38,14 @@ function streetKeysDiffer(
   geocoded: string,
   assessment: string | null,
 ): boolean {
-  const keys = [streetLineKey(entered), streetLineKey(geocoded), streetLineKey(assessment)]
+  const key = (value: string | null) => {
+    if (!value) return null;
+    const { houseNumber, streetName } = parseHouseAndStreet(value);
+    return houseNumber && streetName
+      ? `${houseNumber} ${streetName}`
+      : streetLineKey(value);
+  };
+  const keys = [key(entered), key(geocoded), key(assessment)]
     .filter((key): key is string => Boolean(key));
   return new Set(keys).size > 1;
 }

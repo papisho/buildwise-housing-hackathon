@@ -106,8 +106,9 @@ export function AddressAutocomplete({ address, onChange, pending }: Props) {
             choose(suggestions[activeIndex]);
           }
         }}
-        placeholder="414 Grant Street, Pittsburgh, PA 15219"
+        placeholder="5061 Fifth Ave, Pittsburgh, PA 15232"
         autoComplete="off"
+        disabled={pending}
         required
         aria-describedby="address-guidance address-suggestion-status"
         role="combobox"
